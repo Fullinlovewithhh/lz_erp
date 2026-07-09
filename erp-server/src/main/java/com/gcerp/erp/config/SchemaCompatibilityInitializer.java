@@ -65,6 +65,8 @@ public class SchemaCompatibilityInitializer implements ApplicationRunner {
         addIndexIfMissing("contract", "idx_contract_customer_order_id", "customer_order_id");
         addIndexIfMissing("contract", "idx_contract_factory_order_no", "factory_order_no");
         addIndexIfMissing("contract", "idx_contract_customer_order_no", "customer_order_no");
+        addUniqueIndexIfMissing("contract", "uk_contract_factory_order_no", "factory_order_no");
+        addUniqueIndexIfMissing("customer_order", "uk_customer_order_project_no", "project_id, customer_order_no");
         migrateCustomerOrders();
     }
 
@@ -122,6 +124,17 @@ public class SchemaCompatibilityInitializer implements ApplicationRunner {
                 """, Integer.class, table, indexName);
         if (count == null || count == 0) {
             jdbcTemplate.execute("ALTER TABLE " + table + " ADD INDEX " + indexName + " (" + column + ")");
+        }
+    }
+
+    private void addUniqueIndexIfMissing(String table, String indexName, String columns) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?
+                """, Integer.class, table, indexName);
+        if (count == null || count == 0) {
+            jdbcTemplate.execute("ALTER TABLE " + table + " ADD UNIQUE INDEX " + indexName + " (" + columns + ")");
         }
     }
 }

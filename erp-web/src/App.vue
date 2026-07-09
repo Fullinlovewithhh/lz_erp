@@ -353,30 +353,15 @@
               <div class="form-item"><label>客户项目号</label><input :value="selectedOrderProject?.projectNo || ''" placeholder="选择项目后自动带出" disabled /></div>
               <div class="form-item project-select-field">
                 <label>客户订单号 <span class="required-star">*</span></label>
-                <div class="inline-field">
-                  <select v-model="orderForm.customerOrderId" @change="onOrderCustomerOrderChange">
-                    <option value="">{{ orderForm.projectId ? '请选择客户订单号' : '请先选择项目' }}</option>
-                    <option v-for="o in customerOrderOptions" :key="o.id" :value="String(o.id)">{{ o.customerOrderNo }}</option>
-                  </select>
-                  <button class="mini" :disabled="!selectedOrderProject" @click="showInlineCustomerOrderCreate">旁边填写客户订单号</button>
-                </div>
-                <small v-if="selectedOrderProject && !customerOrderOptions.length" class="hint">该项目暂无客户订单号，请先在旁边填写客户订单号</small>
+                <input v-model.trim="orderForm.customerOrderNo" list="orderCustomerOrderNoList" :disabled="!selectedOrderProject" placeholder="输入客户订单号；已有编号会自动匹配" @input="onOrderCustomerOrderNoInput" />
+                <datalist id="orderCustomerOrderNoList">
+                  <option v-for="o in customerOrderOptions" :key="o.id" :value="o.customerOrderNo"></option>
+                </datalist>
+                <small class="hint" v-if="selectedOrderProject">输入新客户订单号时，保存后系统会自动创建并绑定内部ID</small>
+                <small class="hint" v-else>请先选择项目</small>
               </div>
               <div class="form-item"><label>客户电话</label><input v-model="orderForm.customerPhone" disabled /></div>
               <div class="form-item"><label>客户地址</label><input v-model="orderForm.customerAddress" disabled /></div>
-            </div>
-
-            <div class="inline-project-panel" v-if="orderInlineCustomerOrderVisible">
-              <div class="section-title">填写客户订单号</div>
-              <div class="contract-form-grid">
-                <div class="form-item"><label>客户订单号 <span class="required-star">*</span></label><input v-model.trim="orderInlineCustomerOrderForm.customerOrderNo" placeholder="请输入客户提供的订单号，例如：S*2024-109" /></div>
-                <div class="form-item"><label>订单名称</label><input v-model.trim="orderInlineCustomerOrderForm.customerOrderName" placeholder="可选，例如：二层女孩房" /></div>
-                <div class="form-item span-2"><label>备注</label><input v-model.trim="orderInlineCustomerOrderForm.remark" placeholder="可选" /></div>
-              </div>
-              <div class="actions end">
-                <button class="ghost" @click="hideInlineCustomerOrderCreate">取消填写</button>
-                <button class="primary" @click="saveInlineCustomerOrder">保存并选中客户订单号</button>
-              </div>
             </div>
 
             <div class="inline-project-panel" v-if="orderInlineProjectVisible">
@@ -405,7 +390,7 @@
                   <input :value="`${orderForm.factoryOrderPrefix || 'V'} + 日期 + 流水号`" disabled />
                 </div>
               </div>
-              <div class="form-item span-2"><label>客户订单号</label><input v-model.trim="orderForm.customerOrderNo" disabled placeholder="请先在上方选择客户订单号" /></div>
+              <div class="form-item span-2"><label>客户订单号</label><input v-model.trim="orderForm.customerOrderNo" placeholder="输入客户订单号后自动绑定" /></div>
             </div>
 
             <div class="section-title">业务信息</div>
@@ -3476,9 +3461,10 @@ function selectedCustomerOrder() {
   return customerOrderOptions.value.find((o) => String(o.id) === String(orderForm.value.customerOrderId)) || null
 }
 
-function onOrderCustomerOrderChange() {
-  const row = selectedCustomerOrder()
-  orderForm.value.customerOrderNo = row?.customerOrderNo || ''
+function onOrderCustomerOrderNoInput() {
+  const no = String(orderForm.value.customerOrderNo || '').trim()
+  const row = customerOrderOptions.value.find((o) => String(o.customerOrderNo || '').trim() === no)
+  orderForm.value.customerOrderId = row?.id ? String(row.id) : ''
   autofillOrderBusinessInfo()
 }
 
@@ -3742,7 +3728,7 @@ async function saveOrderEdit() {
   const payload = {
     customerId: orderEditForm.value.customerId ? Number(orderEditForm.value.customerId) : null,
     projectId: orderEditForm.value.projectId ? Number(orderEditForm.value.projectId) : null,
-    customerOrderId: orderEditForm.value.customerOrderId ? Number(orderEditForm.value.customerOrderId) : null,
+    customerOrderId: null,
     factoryOrderNo: orderEditForm.value.factoryOrderNo,
     customerOrderNo: orderEditForm.value.customerOrderNo,
     customerName: orderEditForm.value.customerName,
@@ -3917,7 +3903,6 @@ async function ensureOrderProjectId() {
 async function createOrder(enterQuote = false) {
   if (!orderForm.value.customerId) return window.alert('请先选择客户')
   if (orderInlineProjectVisible.value) return window.alert('请先保存或取消旁边填写的项目')
-  if (orderInlineCustomerOrderVisible.value) return window.alert('请先保存或取消旁边填写的客户订单号')
   let ensuredProjectId = ''
   try {
     ensuredProjectId = await ensureOrderProjectId()
@@ -3925,10 +3910,8 @@ async function createOrder(enterQuote = false) {
     return window.alert(e?.message || '项目处理失败')
   }
   if (!ensuredProjectId) return window.alert('请先选择项目，或选择“无具体项目”')
-  if (!orderForm.value.customerOrderId) return window.alert('请先选择客户订单号，或在旁边填写客户订单号')
-  const customerOrder = selectedCustomerOrder()
-  if (customerOrder) orderForm.value.customerOrderNo = customerOrder.customerOrderNo || ''
-  if (!orderForm.value.customerOrderNo) return window.alert('客户订单号缺失，请重新选择客户订单号')
+  onOrderCustomerOrderNoInput()
+  if (!String(orderForm.value.customerOrderNo || '').trim()) return window.alert('请填写客户订单号')
   autofillOrderBusinessInfo()
   const customFields = {
     总合同号: selectedOrderProject.value?.projectNo || '',
@@ -3961,7 +3944,7 @@ async function createOrder(enterQuote = false) {
   const payload = {
     customerId: Number(orderForm.value.customerId),
     projectId: Number(ensuredProjectId),
-    customerOrderId: Number(orderForm.value.customerOrderId),
+    customerOrderId: orderForm.value.customerOrderId ? Number(orderForm.value.customerOrderId) : null,
     factoryOrderPrefix: orderForm.value.factoryOrderPrefix || 'V',
     factoryOrderNo: '',
     customerOrderNo: orderForm.value.customerOrderNo,

@@ -79,7 +79,7 @@ public class ContractService {
     public synchronized Contract createContract(ContractCreateRequest req) {
         Customer customer = requireCustomer(req.getCustomerId());
         Project project = requireProject(req.getProjectId(), req.getCustomerId());
-        CustomerOrder customerOrder = requireCustomerOrder(req.getCustomerOrderId(), req.getProjectId(), req.getCustomerId());
+        CustomerOrder customerOrder = resolveCustomerOrder(req.getCustomerOrderId(), req.getCustomerOrderNo(), project, customer);
 
         String factoryOrderPrefix = normalizeFactoryOrderPrefix(req.getFactoryOrderPrefix());
         String factoryOrderNo = generateFactoryOrderNo(factoryOrderPrefix);
@@ -195,7 +195,7 @@ public class ContractService {
         Contract contract = getById(contractId);
         Customer customer = requireCustomer(req.getCustomerId());
         Project project = requireProject(req.getProjectId(), req.getCustomerId());
-        CustomerOrder customerOrder = requireCustomerOrder(req.getCustomerOrderId(), req.getProjectId(), req.getCustomerId());
+        CustomerOrder customerOrder = resolveCustomerOrder(req.getCustomerOrderId(), req.getCustomerOrderNo(), project, customer);
 
         String factoryOrderNo = normalizeFactoryOrderNo(req.getFactoryOrderNo());
         if (factoryOrderNo != null && !isValidFactoryOrderNo(factoryOrderNo)) {
@@ -294,6 +294,38 @@ public class ContractService {
             throw new IllegalArgumentException("customer order must belong to the selected project");
         }
         return customerOrder;
+    }
+
+    private CustomerOrder resolveCustomerOrder(Long customerOrderId, String customerOrderNo, Project project, Customer customer) {
+        if (customerOrderId != null) {
+            return requireCustomerOrder(customerOrderId, project.getProjectId(), customer.getId());
+        }
+        String orderNo = normalizeText(customerOrderNo);
+        if (orderNo == null) throw new IllegalArgumentException("customerOrderNo is required");
+
+        CustomerOrder existing = customerOrderMapper.selectOne(new LambdaQueryWrapper<CustomerOrder>()
+                .eq(CustomerOrder::getProjectId, project.getProjectId())
+                .eq(CustomerOrder::getCustomerOrderNo, orderNo)
+                .eq(CustomerOrder::getIsDeleted, 0)
+                .last("LIMIT 1"));
+        if (existing != null) {
+            if (!customer.getId().equals(existing.getCustomerId())) {
+                throw new IllegalArgumentException("customer order must belong to the selected customer");
+            }
+            return existing;
+        }
+
+        CustomerOrder created = new CustomerOrder();
+        created.setCustomerId(customer.getId());
+        created.setProjectId(project.getProjectId());
+        created.setCustomerOrderNo(orderNo);
+        created.setCustomerOrderName(orderNo);
+        created.setStatus("启用");
+        created.setIsDeleted(0);
+        created.setCreatedAt(LocalDateTime.now());
+        created.setUpdatedAt(LocalDateTime.now());
+        customerOrderMapper.insert(created);
+        return created;
     }
 
     private boolean positive(Integer value) {
