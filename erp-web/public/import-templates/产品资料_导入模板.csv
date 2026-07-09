@@ -1,0 +1,3 @@
+product_code,type,product_name,model,material_name,color,handle_color,unit_price,unit_price_unit,thickness,thickness_unit,size,image_url,status,custom_fields
+GMQS34XX26-GD,轻奢柜门,A轻奢柜门-34,23026,中纤,铣型拉手,本体固定,800,m2,26,mm,1200mm*2700mm,/api/master/files/product/demo_product.jpg,启用,{}
+GMQSADSS18,轻奢柜门,A轻奢柜门-1,安德里亚平板柜门,无醛,实色封闭,NULL,430,m2,18,mm,1200mm*2700mm,/api/master/files/product/demo_product2.jpg,启用,{}

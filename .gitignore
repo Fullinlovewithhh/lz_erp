@@ -1,0 +1,39 @@
+﻿# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+
+# Java / Maven
+target/
+*.class
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+*.pid
+
+# Local backups
+backups/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Runtime temp
+tmp/
+temp/
+.cache/

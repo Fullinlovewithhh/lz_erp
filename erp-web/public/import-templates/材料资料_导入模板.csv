@@ -1,0 +1,3 @@
+﻿material_code,material_name,material_type,color,length_mm,width_mm,thickness_mm,image_url,unit,status,custom_fields
+CL001,芦花板,板材,浅胡桃,2440,1220,18,/api/master/files/demo_material.jpg,张,启用,{}
+CL002,无醛板,板材,暖白,2440,1220,18,/api/master/files/demo_material2.jpg,张,启用,{}

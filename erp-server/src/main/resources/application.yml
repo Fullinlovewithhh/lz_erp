@@ -1,0 +1,25 @@
+server:
+  port: 8080
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+  datasource:
+    url: jdbc:mysql://localhost:3306/gc_erp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&connectTimeout=3000&socketTimeout=5000
+    username: root
+    password: 419639
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 鏉╃偞甯村Ч鐘插灥婵瀵叉径杈Е閺冨墎娈戠搾鍛閺冨爼妫块敍宀勪缉閸忓秵妫ら梽鎰搼瀵?      initialization-fail-timeout: 5000
+      # 閼惧嘲褰囨潻鐐村复閺堚偓婢堆呯搼瀵板懏妞傞梻?      connection-timeout: 5000
+      # 鏉╃偞甯撮弽锟犵崣鐡掑懏妞傞弮鍫曟？
+      validation-timeout: 3000
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
