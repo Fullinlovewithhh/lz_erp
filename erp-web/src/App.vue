@@ -1603,8 +1603,7 @@ const C = {
 const modules = [
   { name: C.master, children: [C.staff, C.userAuth, C.product, C.materialData, C.processRule, C.priceRule] },
   { name: C.customer, children: ['客户档案'] },
-  { name: C.order, children: ['客户订单流程', '项目订单', '订单状态', '交期管理', '负责人分配'] },
-  { name: C.quote, children: ['报价单主表', '报价明细', '深化订单池', '版本管理', '财务确认'] },
+  { name: C.order, children: ['客户订单流程'] },
   { name: C.schedule, children: ['订单管理', '板材清单', '五金清单', 'BOM清单'] },
   { name: C.production, children: ['生产任务', '排产计划', '工序进度', '质检包装'] },
   { name: C.purchase, children: ['采购申请', '采购订单', '库存管理', '出入库记录'] },
