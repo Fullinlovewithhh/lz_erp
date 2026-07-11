@@ -224,7 +224,7 @@ public class QuoteDetailService {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 SELECT q.id AS quote_id,
                        q.contract_id,
-                       c.contract_no,
+                       COALESCE(c.factory_order_no, c.contract_no) AS contract_no,
                        c.customer_order_no,
                        c.project_name_snapshot AS project_name,
                        c.customer_name,
@@ -282,7 +282,7 @@ public class QuoteDetailService {
                 FROM (
                     SELECT q.id AS quote_id,
                            q.contract_id,
-                           c.contract_no,
+                           COALESCE(c.factory_order_no, c.contract_no) AS contract_no,
                            c.customer_order_no,
                            c.project_name_snapshot AS project_name,
                            c.customer_name,
@@ -337,7 +337,7 @@ public class QuoteDetailService {
         String serviceStaff = req.getServiceStaff() == null ? "" : req.getServiceStaff();
         String remark = req.getRemark() == null ? "" : req.getRemark();
 
-        Map<String, Object> c = jdbcTemplate.queryForMap("SELECT contract_no FROM contract WHERE id = ?", req.getContractId());
+        Map<String, Object> c = jdbcTemplate.queryForMap("SELECT COALESCE(factory_order_no, contract_no) AS contract_no FROM contract WHERE id = ?", req.getContractId());
         String contractNo = String.valueOf(c.getOrDefault("contract_no", ""));
         jdbcTemplate.update(
                 "INSERT INTO quote_assignment(contract_id,contract_no,service_staff,engineer,status,remark,created_at,updated_at) VALUES(?,?,?,?,?,?,NOW(),NOW())",
@@ -393,7 +393,7 @@ public class QuoteDetailService {
         StringBuilder sql = new StringBuilder("""
                 SELECT qa.id,
                        qa.contract_id,
-                       qa.contract_no,
+                       COALESCE(c.factory_order_no, qa.contract_no) AS contract_no,
                        c.customer_order_no,
                        c.project_name_snapshot AS project_name,
                        qa.service_staff,
@@ -417,7 +417,7 @@ public class QuoteDetailService {
             params.add(contractId);
         }
         if (!kw.isEmpty()) {
-            sql.append(" AND (qa.contract_no LIKE ? OR c.customer_order_no LIKE ? OR qa.service_staff LIKE ? OR qa.engineer LIKE ?) ");
+            sql.append(" AND (COALESCE(c.factory_order_no, qa.contract_no) LIKE ? OR c.customer_order_no LIKE ? OR qa.service_staff LIKE ? OR qa.engineer LIKE ?) ");
             String like = "%" + kw + "%";
             params.add(like);
             params.add(like);
@@ -425,7 +425,7 @@ public class QuoteDetailService {
             params.add(like);
         }
         sql.append("""
-                GROUP BY qa.id, qa.contract_id, qa.contract_no, c.customer_order_no, c.project_name_snapshot, qa.service_staff, qa.engineer, qa.status, qa.remark, qa.created_at, qa.updated_at
+                GROUP BY qa.id, qa.contract_id, COALESCE(c.factory_order_no, qa.contract_no), c.customer_order_no, c.project_name_snapshot, qa.service_staff, qa.engineer, qa.status, qa.remark, qa.created_at, qa.updated_at
                 ORDER BY qa.created_at DESC, qa.id DESC
                 """);
         return jdbcTemplate.queryForList(sql.toString(), params.toArray());

@@ -38,7 +38,9 @@ public class FinanceVoucherService {
         if (!isAllowed(ext)) throw new IllegalArgumentException("仅支持图片或PDF文件");
 
         Contract contract = contractService.getById(contractId);
-        String contractNo = contract.getContractNo();
+        String contractNo = contract.getFactoryOrderNo() == null || contract.getFactoryOrderNo().isBlank()
+                ? contract.getContractNo()
+                : contract.getFactoryOrderNo();
 
         String fileName = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
                 + "_" + UUID.randomUUID().toString().replace("-", "") + ext;

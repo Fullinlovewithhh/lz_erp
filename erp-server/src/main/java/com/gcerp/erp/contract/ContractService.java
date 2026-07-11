@@ -201,7 +201,8 @@ public class ContractService {
         if (factoryOrderNo != null && !isValidFactoryOrderNo(factoryOrderNo)) {
             throw new IllegalArgumentException("factory order no must start with L or V");
         }
-        if (factoryOrderNo != null && !factoryOrderNo.equals(contract.getContractNo())) {
+        String currentFactoryOrderNo = normalizeFactoryOrderNo(contract.getFactoryOrderNo() == null ? contract.getContractNo() : contract.getFactoryOrderNo());
+        if (factoryOrderNo != null && !factoryOrderNo.equals(currentFactoryOrderNo)) {
             Integer duplicate = jdbcTemplate.queryForObject(
                     "SELECT COUNT(1) FROM contract WHERE id <> ? AND (contract_no = ? OR factory_order_no = ?)",
                     Integer.class,

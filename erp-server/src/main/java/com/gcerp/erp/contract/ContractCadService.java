@@ -33,7 +33,9 @@ public class ContractCadService {
             throw new IllegalArgumentException("上传文件不能为空");
         }
         Contract contract = contractService.getById(contractId);
-        String contractNo = contract.getContractNo();
+        String contractNo = contract.getFactoryOrderNo() == null || contract.getFactoryOrderNo().isBlank()
+                ? contract.getContractNo()
+                : contract.getFactoryOrderNo();
         String ext = getExt(file.getOriginalFilename());
         String fileName = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
                 + "_" + UUID.randomUUID().toString().replace("-", "") + ext;
