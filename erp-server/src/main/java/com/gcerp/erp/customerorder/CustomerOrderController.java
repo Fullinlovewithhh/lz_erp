@@ -4,6 +4,10 @@ import com.gcerp.erp.common.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.Map;
 
 import java.util.List;
 
@@ -13,6 +17,7 @@ import java.util.List;
 @CrossOrigin
 public class CustomerOrderController {
     private final CustomerOrderService customerOrderService;
+    private final CustomerOrderCadService customerOrderCadService;
 
     @PostMapping
     public ApiResponse<CustomerOrder> create(@Valid @RequestBody CustomerOrderRequest req) {
@@ -40,5 +45,16 @@ public class CustomerOrderController {
     public ApiResponse<Boolean> delete(@PathVariable Long id) {
         customerOrderService.delete(id);
         return ApiResponse.ok(true);
+    }
+
+    @PostMapping("/{id}/cad-files")
+    public ApiResponse<Map<String, Object>> uploadCad(@PathVariable Long id,
+                                                      @RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.ok(customerOrderCadService.upload(id, file));
+    }
+
+    @GetMapping("/{id}/cad-files")
+    public ApiResponse<List<Map<String, Object>>> listCad(@PathVariable Long id) {
+        return ApiResponse.ok(customerOrderCadService.list(id));
     }
 }

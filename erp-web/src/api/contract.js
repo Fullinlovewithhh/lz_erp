@@ -291,3 +291,147 @@ export function updateQuoteAssignment(id, payload) {
 export function listQuoteAssignments(contractId, keyword) {
   return http.get('/quote-details/assignments', { params: { contractId, keyword } })
 }
+
+export function listProductionLines(enabled) {
+  return http.get('/order-flow/production-lines', { params: { enabled } })
+}
+
+export function createProductionLineV3(payload) {
+  return http.post('/order-flow/production-lines', payload)
+}
+
+export function updateProductionLineV3(id, payload) {
+  return http.put(`/order-flow/production-lines/${id}`, payload)
+}
+
+export function listReviewPoolV3() {
+  return http.get('/order-flow/review-pool')
+}
+
+export function claimCustomerOrderReview(id) {
+  return http.post(`/order-flow/customer-orders/${id}/claim-review`)
+}
+
+export function addSplitDraft(id, payload) {
+  return http.post(`/order-flow/customer-orders/${id}/split-drafts`, payload)
+}
+
+export function listSplitDrafts(id) {
+  return http.get(`/order-flow/customer-orders/${id}/split-drafts`)
+}
+
+export function confirmCustomerOrderSplit(id) {
+  return http.post(`/order-flow/customer-orders/${id}/confirm-split`)
+}
+
+export function listFactoryOrdersV3(customerOrderId, status) {
+  return http.get('/order-flow/factory-orders', { params: { customerOrderId, status } })
+}
+
+export function assignFactoryOrderV3(id, payload) {
+  return http.post(`/order-flow/factory-orders/${id}/assign`, payload)
+}
+
+export function claimFactoryOrderV3(id) {
+  return http.post(`/order-flow/factory-orders/${id}/claim`)
+}
+
+export function saveFactoryOrderQuoteV3(id, payload) {
+  return http.post(`/order-flow/factory-orders/${id}/quotes`, payload)
+}
+
+export function listFactoryOrderQuotesV3(id) {
+  return http.get(`/order-flow/factory-orders/${id}/quotes`)
+}
+
+export function requestPriceAdjustmentV3(id, payload) {
+  return http.post(`/order-flow/customer-orders/${id}/price-adjustments`, payload)
+}
+
+export function approvePriceAdjustmentV3(id, payload) {
+  return http.post(`/order-flow/price-adjustments/${id}/approve`, payload)
+}
+
+export function confirmCustomerQuoteV3(id, payload) {
+  return http.post(`/order-flow/customer-orders/${id}/quote-confirmations`, payload)
+}
+
+export function createPaymentPlanV3(id, payload) {
+  return http.post(`/order-flow/customer-orders/${id}/payment-plans`, payload)
+}
+
+export function approvePaymentPlanV3(id, payload) {
+  return http.post(`/order-flow/customer-orders/${id}/payment-plans/approve`, payload)
+}
+
+export function listPaymentRemindersV3() {
+  return http.get('/order-flow/payment-reminders')
+}
+
+export function listCommercialOrdersV3() {
+  return http.get('/order-flow/commercial-orders')
+}
+
+export function getCommercialDetailV3(id) {
+  return http.get(`/order-flow/customer-orders/${id}/commercial`)
+}
+
+export function getOrderFlowWorkQueues() {
+  return http.get('/order-flow/work-queues')
+}
+
+export function submitPaymentReceiptV3(id, payload) {
+  return http.post(`/order-flow/customer-orders/${id}/receipts`, payload)
+}
+
+export function confirmPaymentReceiptV3(id, payload) {
+  return http.post(`/order-flow/receipts/${id}/confirm`, payload)
+}
+
+export function requestCuttingReleaseV3(id, payload) {
+  return http.post(`/order-flow/customer-orders/${id}/cutting-release`, payload)
+}
+
+export function financeConfirmCuttingReleaseV3(id, payload) {
+  return http.post(`/order-flow/cutting-release/${id}/finance-confirm`, payload)
+}
+
+export function directorApproveCuttingReleaseV3(id, payload) {
+  return http.post(`/order-flow/cutting-release/${id}/director-approve`, payload)
+}
+
+export function releaseToCuttingV3(id) {
+  return http.post(`/order-flow/cutting-release/${id}/release`)
+}
+
+export function uploadCustomerOrderCad(id, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return http.post(`/customer-orders/${id}/cad-files`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function listCustomerOrderCad(id) {
+  return http.get(`/customer-orders/${id}/cad-files`)
+}
+
+export function listReceivingAccountsV3(enabled) {
+  return http.get('/order-flow/receiving-accounts', { params: { enabled } })
+}
+
+export function createReceivingAccountV3(payload) {
+  return http.post('/order-flow/receiving-accounts', payload)
+}
+
+export function updateReceivingAccountV3(id, payload) {
+  return http.put(`/order-flow/receiving-accounts/${id}`, payload)
+}
+
+export function listHardwareItemsV3(keyword) {
+  return http.get('/order-flow/hardware-items', { params: { keyword } })
+}
+
+export function createHardwareItemV3(payload) {
+  return http.post('/order-flow/hardware-items', payload)
+}

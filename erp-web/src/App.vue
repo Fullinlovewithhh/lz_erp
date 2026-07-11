@@ -861,7 +861,11 @@
         <CustomerProjectProfile />
       </section>
 
-      <section class="card" v-if="activeModule !== C.master && !(activeModule === C.quote && ['报价明细','报价单主表','深化订单池'].includes(activeSubModule)) && !(activeModule === C.order && ['项目订单','订单状态'].includes(activeSubModule)) && !isCustomerArchivePage">
+      <section class="customer-profile-host" v-if="activeModule === C.order && activeSubModule === '客户订单流程'">
+        <OrderFlowV3 />
+      </section>
+
+      <section class="card" v-if="activeModule !== C.master && !(activeModule === C.quote && ['报价明细','报价单主表','深化订单池'].includes(activeSubModule)) && !(activeModule === C.order && ['项目订单','订单状态','客户订单流程'].includes(activeSubModule)) && !isCustomerArchivePage">
         <p>当前为「{{ activeSubModule }}」独立页面占位，后续按你的业务继续逐页补齐。</p>
       </section>
     </main>
@@ -1589,6 +1593,7 @@ import brandLogo from './assets/lonzvine-logo.png'
 import loginBg from './assets/login-factory.jpg'
 import CustomerProjectProfile from './views/CustomerProjectProfile.vue'
 import QuoteExtraPricePanel from './components/QuoteExtraPricePanel.vue'
+import OrderFlowV3 from './views/OrderFlowV3.vue'
 
 const C = {
   master: '基础资料', staff: '人员管理', userAuth: '账号权限', product: '产品资料', materialData: '材料资料', processRule: '工艺规则', priceRule: '价格规则',
@@ -1598,7 +1603,7 @@ const C = {
 const modules = [
   { name: C.master, children: [C.staff, C.userAuth, C.product, C.materialData, C.processRule, C.priceRule] },
   { name: C.customer, children: ['客户档案'] },
-  { name: C.order, children: ['项目订单', '订单状态', '交期管理', '负责人分配'] },
+  { name: C.order, children: ['客户订单流程', '项目订单', '订单状态', '交期管理', '负责人分配'] },
   { name: C.quote, children: ['报价单主表', '报价明细', '深化订单池', '版本管理', '财务确认'] },
   { name: C.schedule, children: ['订单管理', '板材清单', '五金清单', 'BOM清单'] },
   { name: C.production, children: ['生产任务', '排产计划', '工序进度', '质检包装'] },
@@ -1632,7 +1637,7 @@ const materials = ref([])
 const staffList = ref([])
 const authUsers = ref([])
 const authUserKeyword = ref('')
-const authRoleOptions = ['ADMIN', 'SERVICE', 'ENGINEER', 'FINANCE', 'PRODUCTION']
+const authRoleOptions = ['ADMIN', 'DIRECTOR', 'SERVICE', 'ENGINEER', 'FINANCE', 'PRODUCTION']
 
 async function doLogin() {
   const username = String(loginForm.value.username || '').trim()

@@ -3,10 +3,12 @@ package com.gcerp.erp.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
+@Order(10)
 @RequiredArgsConstructor
 public class SchemaCompatibilityInitializer implements ApplicationRunner {
     private final JdbcTemplate jdbcTemplate;
@@ -66,7 +68,7 @@ public class SchemaCompatibilityInitializer implements ApplicationRunner {
         addIndexIfMissing("contract", "idx_contract_factory_order_no", "factory_order_no");
         addIndexIfMissing("contract", "idx_contract_customer_order_no", "customer_order_no");
         addUniqueIndexIfMissing("contract", "uk_contract_factory_order_no", "factory_order_no");
-        addUniqueIndexIfMissing("customer_order", "uk_customer_order_project_no", "project_id, customer_order_no");
+        addUniqueIndexIfMissing("customer_order", "uk_customer_order_customer_no", "customer_id, customer_order_no");
         migrateCustomerOrders();
     }
 

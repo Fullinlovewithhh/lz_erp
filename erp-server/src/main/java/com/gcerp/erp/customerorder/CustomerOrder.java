@@ -18,6 +18,17 @@ public class CustomerOrder {
     private String customerOrderName;
     private String remark;
     private String status;
+    private Long serviceStaffId;
+    private Long reviewEngineerId;
+    private String reviewStatus;
+    private String splitInstruction;
+    private String settlementType;
+    private String quoteStatus;
+    private java.math.BigDecimal quoteTotalAmount;
+    private java.math.BigDecimal priceAdjustmentAmount;
+    private java.math.BigDecimal finalReceivableAmount;
+    private String paymentStatus;
+    private String cuttingReleaseStatus;
     private Integer isDeleted;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

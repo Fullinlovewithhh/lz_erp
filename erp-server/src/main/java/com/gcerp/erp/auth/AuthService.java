@@ -182,6 +182,9 @@ public class AuthService {
         if ("ADMIN".equalsIgnoreCase(role)) {
             return new ArrayList<>(all.keySet());
         }
+        if ("DIRECTOR".equalsIgnoreCase(role)) {
+            return new ArrayList<>(all.keySet());
+        }
         if ("SERVICE".equalsIgnoreCase(role)) {
             all.put("客户管理", true);
             all.put("订单管理", true);
