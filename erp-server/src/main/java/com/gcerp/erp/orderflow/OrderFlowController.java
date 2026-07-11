@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import com.gcerp.erp.quote.QuoteCalcRequest;
 
 @RestController
 @RequestMapping("/api/order-flow")
@@ -110,6 +111,11 @@ public class OrderFlowController {
         return ApiResponse.ok(service.listQuotes(id));
     }
 
+    @GetMapping("/quotes/{quoteId}")
+    public ApiResponse<Map<String, Object>> quoteDetail(@PathVariable Long quoteId) {
+        return ApiResponse.ok(service.getQuote(quoteId));
+    }
+
     @PostMapping("/customer-orders/{id}/price-adjustments")
     public ApiResponse<Map<String, Object>> requestPriceAdjustment(@PathVariable Long id,
                                                                    @RequestBody PriceAdjustmentRequest req) {
@@ -201,13 +207,10 @@ public class OrderFlowController {
     public record SplitDraftRequest(String factoryOrderName, Long productionLineId, String orderType,
                                     String parentFactoryOrderId, String remark, Integer sortOrder) {}
     public record AssignmentRequest(Long userId, String reason) {}
-    public record QuoteItemRequest(String productCategory, Long productId, Long hardwareItemId, String productName,
-                                   String specification, BigDecimal quantity, String unit, BigDecimal unitPrice,
-                                   Boolean discountEligible, String remark) {}
-    public record QuoteRequest(BigDecimal discountRate, String quoteDesc, Boolean submit, List<QuoteItemRequest> items) {}
+    public record QuoteRequest(BigDecimal discountRate, String quoteDesc, Boolean submit, List<QuoteCalcRequest> items) {}
     public record PriceAdjustmentRequest(BigDecimal finalAmount, String reason) {}
     public record ApprovalRequest(Boolean approved, String remark) {}
-    public record QuoteConfirmationRequest(String confirmationMethod, LocalDateTime confirmedAt,
+    public record QuoteConfirmationRequest(Long pdfId, String confirmationMethod, LocalDateTime confirmedAt,
                                            String customerContact, String confirmationRemark, String attachmentPath) {}
     public record PaymentInstallmentRequest(Integer installmentNo, BigDecimal plannedAmount, LocalDate dueDate) {}
     public record PaymentPlanRequest(String settlementType, Boolean customerConfirmed,

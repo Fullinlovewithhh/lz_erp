@@ -157,6 +157,8 @@ CREATE TABLE IF NOT EXISTS customer_order (
   final_receivable_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
   payment_status VARCHAR(30) NOT NULL DEFAULT '未收款',
   cutting_release_status VARCHAR(30) NOT NULL DEFAULT '未申请',
+  tax_rate DECIMAL(6,4) NOT NULL DEFAULT 0,
+  quote_valid_days INT NOT NULL DEFAULT 15,
   remark TEXT NULL,
   status VARCHAR(50) NOT NULL DEFAULT '启用',
   is_deleted TINYINT NOT NULL DEFAULT 0,
@@ -838,6 +840,8 @@ CREATE TABLE IF NOT EXISTS customer_order (
   final_receivable_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
   payment_status VARCHAR(30) NOT NULL DEFAULT '未收款',
   cutting_release_status VARCHAR(30) NOT NULL DEFAULT '未申请',
+  tax_rate DECIMAL(6,4) NOT NULL DEFAULT 0,
+  quote_valid_days INT NOT NULL DEFAULT 15,
   remark TEXT NULL,
   status VARCHAR(50) NOT NULL DEFAULT '启用',
   is_deleted TINYINT NOT NULL DEFAULT 0,
@@ -1097,6 +1101,23 @@ CREATE TABLE IF NOT EXISTS factory_order_quote_item (
   hardware_item_id BIGINT NULL,
   product_name VARCHAR(200) NOT NULL,
   specification VARCHAR(500) NULL,
+  material_structure VARCHAR(200) NULL,
+  handle_color VARCHAR(100) NULL,
+  width_mm DECIMAL(12,2) NULL,
+  height_mm DECIMAL(12,2) NULL,
+  thickness_mm DECIMAL(12,2) NULL,
+  hinge_hole VARCHAR(100) NULL,
+  process_desc VARCHAR(500) NULL,
+  attachment_name VARCHAR(200) NULL,
+  attachment_path VARCHAR(500) NULL,
+  area_m2 DECIMAL(12,4) NOT NULL DEFAULT 0,
+  base_unit_price DECIMAL(14,4) NOT NULL DEFAULT 0,
+  special_adjust_total DECIMAL(14,2) NOT NULL DEFAULT 0,
+  final_unit_price DECIMAL(14,4) NOT NULL DEFAULT 0,
+  selected_rule_ids VARCHAR(500) NULL,
+  custom_rule_json JSON NULL,
+  production_process VARCHAR(200) NULL,
+  technician VARCHAR(100) NULL,
   quantity DECIMAL(12,4) NOT NULL,
   unit VARCHAR(30) NOT NULL,
   unit_price DECIMAL(14,4) NOT NULL,
@@ -1108,6 +1129,25 @@ CREATE TABLE IF NOT EXISTS factory_order_quote_item (
   sort_order INT NOT NULL DEFAULT 0,
   KEY idx_factory_quote_item_quote (quote_id),
   CONSTRAINT fk_factory_quote_item_quote FOREIGN KEY (quote_id) REFERENCES factory_order_quote(id)
+);
+
+CREATE TABLE IF NOT EXISTS factory_order_quote_item_extra_price (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  quote_item_id BIGINT NOT NULL,
+  quote_id BIGINT NOT NULL,
+  source_rule_id BIGINT NULL,
+  rule_name VARCHAR(100) NOT NULL,
+  adjust_mode VARCHAR(50) NOT NULL,
+  adjust_value DECIMAL(14,4) NOT NULL,
+  unit_desc VARCHAR(50) NULL,
+  rule_quantity DECIMAL(12,4) NULL,
+  final_charge DECIMAL(14,2) NOT NULL,
+  discount_eligible TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  KEY idx_v3_quote_extra_item (quote_item_id),
+  KEY idx_v3_quote_extra_quote (quote_id),
+  CONSTRAINT fk_v3_quote_extra_item FOREIGN KEY (quote_item_id) REFERENCES factory_order_quote_item(id),
+  CONSTRAINT fk_v3_quote_extra_quote FOREIGN KEY (quote_id) REFERENCES factory_order_quote(id)
 );
 
 CREATE TABLE IF NOT EXISTS customer_order_price_adjustment (
@@ -1131,6 +1171,7 @@ CREATE TABLE IF NOT EXISTS customer_order_price_adjustment (
 CREATE TABLE IF NOT EXISTS customer_quote_confirmation (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   customer_order_id BIGINT NOT NULL,
+  pdf_id BIGINT NOT NULL,
   confirmation_version INT NOT NULL,
   confirmation_method VARCHAR(30) NOT NULL,
   confirmed_at DATETIME NOT NULL,
@@ -1138,9 +1179,47 @@ CREATE TABLE IF NOT EXISTS customer_quote_confirmation (
   confirmation_remark VARCHAR(500) NULL,
   attachment_path VARCHAR(500) NULL,
   recorded_by BIGINT NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT '有效',
   created_at DATETIME NOT NULL,
   KEY idx_quote_confirmation_order (customer_order_id),
   CONSTRAINT fk_quote_confirmation_order FOREIGN KEY (customer_order_id) REFERENCES customer_order(id)
+);
+
+CREATE TABLE IF NOT EXISTS company_profile (
+  id BIGINT PRIMARY KEY,
+  company_name VARCHAR(200) NOT NULL,
+  logo_path VARCHAR(500) NULL,
+  company_address VARCHAR(500) NULL,
+  contact_phone VARCHAR(100) NULL,
+  updated_at DATETIME NOT NULL
+);
+
+INSERT IGNORE INTO company_profile(id,company_name,logo_path,company_address,contact_phone,updated_at)
+VALUES(1,'龙泽伟尼',NULL,NULL,NULL,NOW());
+
+CREATE TABLE IF NOT EXISTS customer_quote_pdf (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  customer_order_id BIGINT NOT NULL,
+  pdf_version INT NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT '待客户确认',
+  tax_rate DECIMAL(6,4) NOT NULL DEFAULT 0,
+  valid_days INT NOT NULL DEFAULT 15,
+  product_craft_original DECIMAL(14,2) NOT NULL,
+  product_craft_discount DECIMAL(14,2) NOT NULL,
+  non_discount_craft DECIMAL(14,2) NOT NULL,
+  hardware_amount DECIMAL(14,2) NOT NULL,
+  price_adjustment DECIMAL(14,2) NOT NULL,
+  untaxed_total DECIMAL(14,2) NOT NULL,
+  tax_amount DECIMAL(14,2) NOT NULL,
+  tax_included_total DECIMAL(14,2) NOT NULL,
+  quote_remark VARCHAR(1000) NULL,
+  file_path VARCHAR(500) NOT NULL,
+  generated_by BIGINT NOT NULL,
+  generated_at DATETIME NOT NULL,
+  invalidated_at DATETIME NULL,
+  UNIQUE KEY uk_customer_quote_pdf_version (customer_order_id,pdf_version),
+  KEY idx_customer_quote_pdf_order (customer_order_id),
+  CONSTRAINT fk_customer_quote_pdf_order FOREIGN KEY (customer_order_id) REFERENCES customer_order(id)
 );
 
 CREATE TABLE IF NOT EXISTS receiving_account (

@@ -20,6 +20,7 @@ public class V3SchemaInitializer implements ApplicationRunner {
         createCoreTables();
         addCustomerOrderColumns();
         createBusinessTables();
+        addFullQuoteColumns();
     }
 
     private void createCoreTables() {
@@ -54,6 +55,8 @@ public class V3SchemaInitializer implements ApplicationRunner {
         addColumn("customer_order", "final_receivable_amount", "DECIMAL(14,2) NOT NULL DEFAULT 0");
         addColumn("customer_order", "payment_status", "VARCHAR(30) NOT NULL DEFAULT '未收款'");
         addColumn("customer_order", "cutting_release_status", "VARCHAR(30) NOT NULL DEFAULT '未申请'");
+        addColumn("customer_order", "tax_rate", "DECIMAL(6,4) NOT NULL DEFAULT 0");
+        addColumn("customer_order", "quote_valid_days", "INT NOT NULL DEFAULT 15");
         addUniqueIndex("customer_order", "uk_customer_order_customer_no", "customer_id, customer_order_no");
     }
 
@@ -134,11 +137,33 @@ public class V3SchemaInitializer implements ApplicationRunner {
                 """,
                 """
                 CREATE TABLE IF NOT EXISTS customer_quote_confirmation (
-                  id BIGINT PRIMARY KEY AUTO_INCREMENT, customer_order_id BIGINT NOT NULL, confirmation_version INT NOT NULL,
+                  id BIGINT PRIMARY KEY AUTO_INCREMENT, customer_order_id BIGINT NOT NULL, pdf_id BIGINT NULL,
+                  confirmation_version INT NOT NULL,
                   confirmation_method VARCHAR(30) NOT NULL, confirmed_at DATETIME NOT NULL,
                   customer_contact VARCHAR(100) NOT NULL, confirmation_remark VARCHAR(500) NULL,
-                  attachment_path VARCHAR(500) NULL, recorded_by BIGINT NOT NULL, created_at DATETIME NOT NULL,
+                  attachment_path VARCHAR(500) NULL, recorded_by BIGINT NOT NULL,
+                  status VARCHAR(30) NOT NULL DEFAULT '有效', created_at DATETIME NOT NULL,
                   KEY idx_quote_confirmation_order (customer_order_id)
+                )
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS company_profile (
+                  id BIGINT PRIMARY KEY, company_name VARCHAR(200) NOT NULL, logo_path VARCHAR(500) NULL,
+                  company_address VARCHAR(500) NULL, contact_phone VARCHAR(100) NULL, updated_at DATETIME NOT NULL
+                )
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS customer_quote_pdf (
+                  id BIGINT PRIMARY KEY AUTO_INCREMENT, customer_order_id BIGINT NOT NULL, pdf_version INT NOT NULL,
+                  status VARCHAR(30) NOT NULL DEFAULT '待客户确认', tax_rate DECIMAL(6,4) NOT NULL DEFAULT 0,
+                  valid_days INT NOT NULL DEFAULT 15, product_craft_original DECIMAL(14,2) NOT NULL,
+                  product_craft_discount DECIMAL(14,2) NOT NULL, non_discount_craft DECIMAL(14,2) NOT NULL,
+                  hardware_amount DECIMAL(14,2) NOT NULL, price_adjustment DECIMAL(14,2) NOT NULL,
+                  untaxed_total DECIMAL(14,2) NOT NULL, tax_amount DECIMAL(14,2) NOT NULL,
+                  tax_included_total DECIMAL(14,2) NOT NULL, quote_remark VARCHAR(1000) NULL,
+                  file_path VARCHAR(500) NOT NULL, generated_by BIGINT NOT NULL, generated_at DATETIME NOT NULL,
+                  invalidated_at DATETIME NULL, UNIQUE KEY uk_customer_quote_pdf_version (customer_order_id,pdf_version),
+                  KEY idx_customer_quote_pdf_order (customer_order_id)
                 )
                 """,
                 """
@@ -220,6 +245,42 @@ public class V3SchemaInitializer implements ApplicationRunner {
                 """
         );
         ddl.forEach(jdbcTemplate::execute);
+        jdbcTemplate.update("""
+                INSERT IGNORE INTO company_profile(id,company_name,logo_path,company_address,contact_phone,updated_at)
+                VALUES(1,'龙泽伟尼',NULL,NULL,NULL,NOW())
+                """);
+    }
+
+    private void addFullQuoteColumns() {
+        addColumn("factory_order_quote_item", "material_structure", "VARCHAR(200) NULL");
+        addColumn("factory_order_quote_item", "handle_color", "VARCHAR(100) NULL");
+        addColumn("factory_order_quote_item", "width_mm", "DECIMAL(12,2) NULL");
+        addColumn("factory_order_quote_item", "height_mm", "DECIMAL(12,2) NULL");
+        addColumn("factory_order_quote_item", "thickness_mm", "DECIMAL(12,2) NULL");
+        addColumn("factory_order_quote_item", "hinge_hole", "VARCHAR(100) NULL");
+        addColumn("factory_order_quote_item", "process_desc", "VARCHAR(500) NULL");
+        addColumn("factory_order_quote_item", "attachment_name", "VARCHAR(200) NULL");
+        addColumn("factory_order_quote_item", "attachment_path", "VARCHAR(500) NULL");
+        addColumn("factory_order_quote_item", "area_m2", "DECIMAL(12,4) NOT NULL DEFAULT 0");
+        addColumn("factory_order_quote_item", "base_unit_price", "DECIMAL(14,4) NOT NULL DEFAULT 0");
+        addColumn("factory_order_quote_item", "special_adjust_total", "DECIMAL(14,2) NOT NULL DEFAULT 0");
+        addColumn("factory_order_quote_item", "final_unit_price", "DECIMAL(14,4) NOT NULL DEFAULT 0");
+        addColumn("factory_order_quote_item", "selected_rule_ids", "VARCHAR(500) NULL");
+        addColumn("factory_order_quote_item", "custom_rule_json", "JSON NULL");
+        addColumn("factory_order_quote_item", "production_process", "VARCHAR(200) NULL");
+        addColumn("factory_order_quote_item", "technician", "VARCHAR(100) NULL");
+        addColumn("customer_quote_confirmation", "status", "VARCHAR(30) NOT NULL DEFAULT '有效'");
+        addColumn("customer_quote_confirmation", "pdf_id", "BIGINT NULL");
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS factory_order_quote_item_extra_price (
+                  id BIGINT PRIMARY KEY AUTO_INCREMENT, quote_item_id BIGINT NOT NULL, quote_id BIGINT NOT NULL,
+                  source_rule_id BIGINT NULL, rule_name VARCHAR(100) NOT NULL, adjust_mode VARCHAR(50) NOT NULL,
+                  adjust_value DECIMAL(14,4) NOT NULL, unit_desc VARCHAR(50) NULL, rule_quantity DECIMAL(12,4) NULL,
+                  final_charge DECIMAL(14,2) NOT NULL, discount_eligible TINYINT NOT NULL DEFAULT 1,
+                  created_at DATETIME NOT NULL, KEY idx_v3_quote_extra_item (quote_item_id),
+                  KEY idx_v3_quote_extra_quote (quote_id)
+                )
+                """);
     }
 
     private void addColumn(String table, String column, String definition) {

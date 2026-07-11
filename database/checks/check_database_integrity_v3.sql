@@ -24,6 +24,20 @@ FROM factory_order_quote q
 LEFT JOIN factory_order fo ON fo.factory_order_id=q.factory_order_id
 WHERE fo.factory_order_id IS NULL;
 
+SELECT 'ORPHAN_V3_QUOTE_EXTRA' issue, CAST(e.id AS CHAR) reference_value
+FROM factory_order_quote_item_extra_price e
+LEFT JOIN factory_order_quote_item i ON i.id=e.quote_item_id
+WHERE i.id IS NULL;
+
+SELECT 'PDF_AMOUNT_MISMATCH' issue, CAST(p.id AS CHAR) reference_value
+FROM customer_quote_pdf p
+WHERE p.untaxed_total+p.tax_amount<>p.tax_included_total;
+
+SELECT 'ORPHAN_QUOTE_CONFIRMATION_PDF' issue, CAST(c.id AS CHAR) reference_value
+FROM customer_quote_confirmation c
+LEFT JOIN customer_quote_pdf p ON p.id=c.pdf_id
+WHERE p.id IS NULL;
+
 SELECT 'ORPHAN_PAYMENT_PLAN' issue, CAST(pp.id AS CHAR) reference_value
 FROM customer_payment_plan pp
 LEFT JOIN customer_order co ON co.id=pp.customer_order_id

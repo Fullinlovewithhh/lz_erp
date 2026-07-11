@@ -6,11 +6,13 @@ USE gc_erp;
 SET FOREIGN_KEY_CHECKS = 0;
 
 TRUNCATE TABLE inventory_reservation;
+TRUNCATE TABLE factory_order_quote_item_extra_price;
 TRUNCATE TABLE factory_order_quote_item;
 TRUNCATE TABLE factory_order_quote;
 TRUNCATE TABLE factory_order_assignment_log;
 TRUNCATE TABLE customer_order_price_adjustment;
 TRUNCATE TABLE customer_quote_confirmation;
+TRUNCATE TABLE customer_quote_pdf;
 TRUNCATE TABLE customer_payment_receipt;
 TRUNCATE TABLE customer_payment_plan;
 TRUNCATE TABLE cutting_release_request;

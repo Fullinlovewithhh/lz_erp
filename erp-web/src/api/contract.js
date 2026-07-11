@@ -344,6 +344,10 @@ export function listFactoryOrderQuotesV3(id) {
   return http.get(`/order-flow/factory-orders/${id}/quotes`)
 }
 
+export function getFactoryOrderQuoteV3(quoteId) {
+  return http.get(`/order-flow/quotes/${quoteId}`)
+}
+
 export function requestPriceAdjustmentV3(id, payload) {
   return http.post(`/order-flow/customer-orders/${id}/price-adjustments`, payload)
 }
@@ -434,4 +438,30 @@ export function listHardwareItemsV3(keyword) {
 
 export function createHardwareItemV3(payload) {
   return http.post('/order-flow/hardware-items', payload)
+}
+
+export function uploadQuoteAttachmentV3(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return http.post('/order-flow/quote-attachments', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
+
+export function getCompanyProfileV3() {
+  return http.get('/order-flow/company-profile')
+}
+
+export function updateCompanyProfileV3(payload) {
+  return http.put('/order-flow/company-profile', payload)
+}
+
+export function generateCustomerQuotePdfV3(id, payload) {
+  return http.post(`/order-flow/customer-orders/${id}/quote-pdfs`, payload)
+}
+
+export function listCustomerQuotePdfsV3(id) {
+  return http.get(`/order-flow/customer-orders/${id}/quote-pdfs`)
+}
+
+export function downloadCustomerQuotePdfV3(pdfId) {
+  return http.get(`/order-flow/quote-pdfs/${pdfId}/download`, { responseType: 'blob' })
 }

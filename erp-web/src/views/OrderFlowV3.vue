@@ -9,23 +9,22 @@
       <div class="form-row">
         <label>客户<select v-model="orderForm.customerId"><option value="">请选择</option><option v-for="c in customers" :key="c.id" :value="c.id">{{ c.customerName }}</option></select></label>
         <label>客户订单号<input v-model.trim="orderForm.customerOrderNo" /></label>
-        <label>订单名称<input v-model.trim="orderForm.customerOrderName" placeholder="住宅1" /></label>
         <label>备注<input v-model.trim="orderForm.remark" /></label>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>客户</th><th>客户订单号</th><th>订单名称</th><th>CAD评审</th><th>报价</th><th>付款</th><th>下料放行</th><th>CAD</th></tr></thead>
-        <tbody><tr v-for="o in orderRows" :key="o.id"><td>{{ customerName(o.customerId) }}</td><td>{{ o.customerOrderNo }}</td><td>{{ o.customerOrderName || '-' }}</td><td>{{ o.reviewStatus }}</td><td>{{ o.quoteStatus }}</td><td>{{ o.paymentStatus }}</td><td>{{ o.cuttingReleaseStatus }}</td><td><label class="file-action">上传<input type="file" @change="uploadCad(o.id, $event)" /></label></td></tr></tbody>
+      <div class="table-wrap"><table><thead><tr><th>客户</th><th>客户订单号</th><th>CAD评审</th><th>报价</th><th>付款</th><th>下料放行</th><th>CAD</th></tr></thead>
+        <tbody><tr v-for="o in orderRows" :key="o.id"><td>{{ customerName(o.customerId) }}</td><td>{{ o.customerOrderNo }}</td><td>{{ o.reviewStatus }}</td><td>{{ o.quoteStatus }}</td><td>{{ o.paymentStatus }}</td><td>{{ o.cuttingReleaseStatus }}</td><td><label class="file-action">上传<input type="file" @change="uploadCad(o.id, $event)" /></label></td></tr></tbody>
       </table></div>
     </section>
 
     <section v-if="activeTab === 'CAD评审'" class="flow-section">
       <div class="section-head"><h2>CAD评审池</h2><button @click="loadReviewPool">刷新</button></div>
-      <div class="table-wrap"><table><thead><tr><th>客户</th><th>客户订单号</th><th>订单名称</th><th>状态</th><th>评审设计师</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="o in reviewPool" :key="o.id"><td>{{ o.customer_name }}</td><td>{{ o.customer_order_no }}</td><td>{{ o.customer_order_name || '-' }}</td><td>{{ o.review_status }}</td><td>{{ o.review_engineer_name || '-' }}</td><td><button v-if="!o.review_engineer_id" class="primary" @click="claimReview(o.id)">领取</button><button v-else @click="selectForSplit(o)">拆单草稿</button></td></tr></tbody>
+      <div class="table-wrap"><table><thead><tr><th>客户</th><th>客户订单号</th><th>状态</th><th>评审设计师</th><th>操作</th></tr></thead>
+        <tbody><tr v-for="o in reviewPool" :key="o.id"><td>{{ o.customer_name }}</td><td>{{ o.customer_order_no }}</td><td>{{ o.review_status }}</td><td>{{ o.review_engineer_name || '-' }}</td><td><button v-if="!o.review_engineer_id" class="primary" @click="claimReview(o.id)">领取</button><button v-else @click="selectForSplit(o)">拆单草稿</button></td></tr></tbody>
       </table></div>
     </section>
 
     <section v-if="activeTab === '拆单确认'" class="flow-section">
-      <div class="section-head"><h2>拆单草稿</h2><select v-model="selectedCustomerOrderId" @change="loadDrafts"><option value="">选择客户订单</option><option v-for="o in orderRows" :key="o.id" :value="o.id">{{ o.customerOrderNo }} / {{ o.customerOrderName }}</option></select></div>
+      <div class="section-head"><h2>拆单草稿</h2><select v-model="selectedCustomerOrderId" @change="loadDrafts"><option value="">选择客户订单</option><option v-for="o in orderRows" :key="o.id" :value="o.id">{{ o.customerOrderNo }}</option></select></div>
       <div class="form-row">
         <label>工厂订单名称<input v-model.trim="draftForm.factoryOrderName" placeholder="住宅1-客厅" /></label>
         <label>生产线<select v-model="draftForm.productionLineId"><option value="">请选择</option><option v-for="l in enabledLines" :key="l.id" :value="l.id">{{ l.line_code }} / {{ l.line_name }}</option></select></label>
@@ -44,10 +43,30 @@
         <tbody><tr v-for="o in factoryOrders" :key="o.factory_order_id"><td>{{ o.factory_order_id }}</td><td>{{ o.factory_order_name }}</td><td>{{ o.customer_order_no }}</td><td>{{ o.line_code }}</td><td>{{ o.order_type === 'SUPPLEMENT' ? '补单' : '正常' }}</td><td>{{ o.quote_assignee_name || '订单池' }}</td><td>{{ o.status }}</td><td><button v-if="!o.quote_assignee_id" class="primary" @click="claimFactory(o.factory_order_id)">领取报价</button><button @click="assignFactory(o)">指定/转交</button><button @click="openQuote(o)">报价</button></td></tr></tbody>
       </table></div>
       <div v-if="quoteFactory" class="commercial-panel">
-        <h3>{{ quoteFactory.factory_order_id }} / {{ quoteFactory.factory_order_name }}</h3>
-        <div class="form-row"><label>整单折扣<input v-model.number="quoteForm.discountRate" type="number" min="0" max="1" step="0.01" /></label><label>报价说明<input v-model.trim="quoteForm.quoteDesc" /></label><button class="align-end" @click="addQuoteItem">增加明细</button><button class="primary align-end" @click="submitQuote">提交新版本</button></div>
-        <div class="table-wrap"><table><thead><tr><th>分类</th><th>产品/五金</th><th>规格</th><th>数量</th><th>单位</th><th>单价</th><th>参与折扣</th><th>金额</th><th></th></tr></thead><tbody><tr v-for="(item,index) in quoteForm.items" :key="index"><td><select v-model="item.productCategory" @change="onQuoteCategory(item)"><option value="CUSTOM">定制产品</option><option value="HARDWARE">五金配件</option><option value="OTHER">其他</option></select></td><td><input v-model.trim="item.productName" list="hardware-options" /></td><td><input v-model.trim="item.specification" /></td><td><input v-model.number="item.quantity" type="number" min="0" /></td><td><input v-model.trim="item.unit" /></td><td><input v-model.number="item.unitPrice" type="number" min="0" /></td><td><input v-model="item.discountEligible" type="checkbox" :disabled="item.productCategory === 'HARDWARE'" /></td><td>{{ money(item.quantity * item.unitPrice * (item.discountEligible ? quoteForm.discountRate : 1)) }}</td><td><button @click="quoteForm.items.splice(index,1)">删除</button></td></tr></tbody></table></div>
+        <div class="section-head"><h3>{{ quoteFactory.factory_order_id }} / {{ quoteFactory.factory_order_name }}</h3><div><button @click="addQuoteItem">增加明细</button><button @click="submitQuote(false)">暂存</button><button class="primary" @click="submitQuote(true)">提交新版本</button></div></div>
+        <div class="form-row"><label>工厂订单折扣<input v-model.number="quoteForm.discountRate" type="number" min="0" max="1" step="0.01" /></label><label>报价说明<input v-model.trim="quoteForm.quoteDesc" /></label></div>
+        <div v-for="(item,index) in quoteForm.items" :key="index" class="quote-item-editor">
+          <div class="quote-item-head"><strong>明细 {{ index + 1 }}</strong><button @click="quoteForm.items.splice(index,1)">删除</button></div>
+          <div class="quote-fields">
+            <label>分类<select v-model="item.productCategory" @change="onQuoteCategory(item)"><option value="CUSTOM">定制产品</option><option value="HARDWARE">五金配件</option><option value="OTHER">其他</option></select></label>
+            <label>产品名称<input v-model.trim="item.productName" :list="item.productCategory === 'HARDWARE' ? 'hardware-options' : 'product-options'" @change="selectCatalogItem(item)" /></label>
+            <label>材质结构<input v-model.trim="item.materialStructure" list="material-options" /></label><label>拉手颜色<input v-model.trim="item.handleColor" /></label>
+            <label>宽(mm)<input v-model.number="item.widthMm" type="number" min="0" /></label><label>高(mm)<input v-model.number="item.heightMm" type="number" min="0" /></label><label>厚(mm)<input v-model.number="item.thicknessMm" type="number" min="0" /></label>
+            <label>数量<input v-model.number="item.quantity" type="number" min="1" /></label><label>单位<input v-model.trim="item.unit" /></label><label>基础单价<input v-model.number="item.baseUnitPrice" type="number" min="0" /></label>
+            <label>铰链孔<input v-model.trim="item.hingeHole" /></label><label>工艺说明<input v-model.trim="item.processDesc" /></label><label>生产工序<input v-model.trim="item.productionProcess" /></label><label>技术员<input v-model.trim="item.technician" /></label>
+            <label class="check"><input v-model="item.discountEligible" type="checkbox" :disabled="item.productCategory === 'HARDWARE'" />产品参与折扣</label>
+            <label class="file-action">明细图片<input type="file" accept="image/*" @change="uploadQuoteImage(item,$event)" /></label><span>{{ item.attachmentName || '未上传' }}</span>
+          </div>
+          <div v-if="item.productCategory !== 'HARDWARE'" class="rule-area">
+            <strong>特殊工艺加价</strong>
+            <div class="rule-list"><label v-for="r in quoteRules" :key="r.id"><input type="checkbox" :checked="item.selectedRuleIds.includes(r.id)" @change="toggleRule(item,r,$event)" />{{ r.rule_name }} / {{ r.adjust_value }}{{ r.unit_desc }} <input type="checkbox" :checked="!item.nonDiscountRuleIds.includes(r.id)" :disabled="!item.selectedRuleIds.includes(r.id)" @change="toggleRuleDiscount(item,r,$event)" />参与折扣</label></div>
+            <div class="custom-rule-row"><input v-model.trim="item.newRule.ruleName" placeholder="自定义工艺" /><select v-model="item.newRule.adjustMode"><option value="FIXED_PER_M2">按平米</option><option value="FIXED_PER_ITEM">按件</option><option value="PERCENT">百分比</option></select><input v-model.number="item.newRule.adjustValue" type="number" placeholder="加价值" /><label class="check"><input v-model="item.newRule.discountEligible" type="checkbox" />参与折扣</label><button @click="addCustomRule(item)">加入</button></div>
+            <div class="tag-list"><span v-for="(r,ri) in item.customRules" :key="ri">{{ r.ruleName }} {{ r.adjustValue }}{{ r.unitDesc || '' }} / {{ item.nonDiscountCustomRuleNames.includes(r.ruleName) ? '不折扣' : '参与折扣' }} <button @click="removeCustomRule(item,ri)">×</button></span></div>
+          </div>
+        </div>
         <datalist id="hardware-options"><option v-for="h in hardware" :key="h.id" :value="h.hardware_name" /></datalist>
+        <datalist id="product-options"><option v-for="p in products" :key="p.id" :value="p.model || p.product_name" /></datalist>
+        <datalist id="material-options"><option v-for="m in materials" :key="m.id" :value="m.material_name" /></datalist>
       </div>
     </section>
 
@@ -58,13 +77,21 @@
       </table></div>
 
       <div v-if="commercialDetail.order" class="commercial-panel">
-        <h3>{{ commercialDetail.order.customer_order_no }} / {{ commercialDetail.order.customer_order_name }}</h3>
+        <h3>{{ commercialDetail.order.customer_order_no }}</h3>
         <div class="form-row">
           <label>客户最终成交价<input v-model.number="adjustmentForm.finalAmount" type="number" min="0" step="0.01" /></label>
           <label>调整原因<input v-model.trim="adjustmentForm.reason" /></label>
           <button class="primary align-end" @click="submitAdjustment">提交厂长审批</button>
         </div>
         <div class="form-row">
+          <label>税率<input v-model.number="pdfForm.taxRate" type="number" min="0" max="1" step="0.01" /></label>
+          <label>报价有效期（天）<input v-model.number="pdfForm.validDays" type="number" min="1" /></label>
+          <label>PDF备注<input v-model.trim="pdfForm.quoteRemark" /></label>
+          <button class="primary align-end" @click="generatePdf">生成客户报价PDF</button>
+        </div>
+        <div class="tag-list"><span v-for="p in quotePdfs" :key="p.id">V{{ p.pdf_version }} / {{ p.status }} / 价税合计 {{ money(p.tax_included_total) }} <button @click="downloadPdf(p)">下载</button></span></div>
+        <div class="form-row">
+          <label>客户确认PDF版本<select v-model="confirmationForm.pdfId"><option value="">请选择</option><option v-for="p in quotePdfs.filter(x=>x.status!=='已失效')" :key="p.id" :value="p.id">V{{ p.pdf_version }} / {{ p.status }}</option></select></label>
           <label>确认方式<select v-model="confirmationForm.confirmationMethod"><option>微信</option><option>电话</option><option>邮件</option><option>现场</option><option>其他</option></select></label>
           <label>客户联系人<input v-model.trim="confirmationForm.customerContact" /></label>
           <label>确认备注<input v-model.trim="confirmationForm.confirmationRemark" /></label>
@@ -100,6 +127,7 @@
     </section>
 
     <section v-if="activeTab === '配置'" class="flow-section">
+      <div class="config-band"><h2>公司报价资料</h2><div class="form-row"><label>公司名称<input v-model.trim="companyProfile.companyName" /></label><label>公司地址<input v-model.trim="companyProfile.companyAddress" /></label><label>联系电话<input v-model.trim="companyProfile.contactPhone" /></label><label class="file-action">公司Logo<input type="file" accept="image/*" @change="uploadCompanyLogo" /></label><span>{{ companyProfile.logoPath || '未上传' }}</span><button class="primary align-end" @click="saveCompanyProfile">保存</button></div></div>
       <div class="config-band"><h2>生产线</h2><div class="form-row"><label>编码<input v-model.trim="lineForm.lineCode" /></label><label>名称<input v-model.trim="lineForm.lineName" /></label><button class="primary align-end" @click="addLine">新增</button></div><div class="tag-list"><span v-for="l in lines" :key="l.id">{{ l.line_code }} / {{ l.line_name }} / {{ Number(l.enabled) ? '启用' : '停用' }}</span></div></div>
       <div class="config-band"><h2>收款账户</h2><div class="form-row"><label>编码<input v-model.trim="accountForm.accountCode" /></label><label>名称<input v-model.trim="accountForm.accountName" /></label><label>方式<input v-model.trim="accountForm.paymentMethod" /></label><label>银行<input v-model.trim="accountForm.bankName" /></label><button class="primary align-end" @click="addAccount">新增</button></div><div class="tag-list"><span v-for="a in accounts" :key="a.id">{{ a.account_code }} / {{ a.account_name }} / {{ a.payment_method }}</span></div></div>
       <div class="config-band"><h2>五金库</h2><div class="form-row"><label>编码<input v-model.trim="hardwareForm.hardwareCode" /></label><label>名称<input v-model.trim="hardwareForm.hardwareName" /></label><label>单位<input v-model.trim="hardwareForm.unit" /></label><label>报价<input v-model.number="hardwareForm.salePrice" type="number" /></label><label>库存模式<select v-model="hardwareForm.stockMode"><option value="STOCK">常用库存</option><option value="PURCHASE">按单采购</option></select></label><button class="primary align-end" @click="addHardware">新增</button></div><div class="table-wrap"><table><thead><tr><th>编码</th><th>名称</th><th>模式</th><th>报价</th><th>现有库存</th><th>可用库存</th></tr></thead><tbody><tr v-for="h in hardware" :key="h.id"><td>{{ h.hardware_code }}</td><td>{{ h.hardware_name }}</td><td>{{ h.stock_mode }}</td><td>{{ money(h.sale_price) }}</td><td>{{ h.on_hand_quantity || 0 }}</td><td>{{ h.available_quantity || 0 }}</td></tr></tbody></table></div></div>
@@ -124,28 +152,34 @@ const commercialDetail = ref({})
 const queues = ref({})
 const accounts = ref([])
 const hardware = ref([])
+const products = ref([])
+const materials = ref([])
+const quoteRules = ref([])
+const quotePdfs = ref([])
+const companyProfile = ref({ companyName: '龙泽伟尼', logoPath: '', companyAddress: '', contactPhone: '' })
 const selectedCustomerOrderId = ref('')
 const quoteFactory = ref(null)
 const enabledLines = computed(() => lines.value.filter(l => Number(l.enabled) === 1))
 const enabledAccounts = computed(() => accounts.value.filter(a => Number(a.enabled) === 1))
 
-const orderForm = ref({ customerId: '', customerOrderNo: '', customerOrderName: '', remark: '' })
+const orderForm = ref({ customerId: '', customerOrderNo: '', remark: '' })
 const draftForm = ref({ factoryOrderName: '', productionLineId: '', orderType: 'NORMAL', parentFactoryOrderId: '', remark: '' })
 const adjustmentForm = ref({ finalAmount: 0, reason: '' })
-const confirmationForm = ref({ confirmationMethod: '微信', customerContact: '', confirmationRemark: '' })
+const confirmationForm = ref({ pdfId: '', confirmationMethod: '微信', customerContact: '', confirmationRemark: '' })
+const pdfForm = ref({ taxRate: 0, validDays: 15, quoteRemark: '' })
 const paymentPlanForm = ref({ settlementType: 'FULL', amount: 0, dueDate: '' })
 const receiptForm = ref({ actualAmount: 0, paymentMethod: '对公账户', receivingAccountId: '', payerName: '' })
 const releaseForm = ref({ requestType: '正常下料', bossVerbalApproved: false, requestReason: '' })
 const lineForm = ref({ lineCode: '', lineName: '' })
 const accountForm = ref({ accountCode: '', accountName: '', paymentMethod: '', bankName: '' })
 const hardwareForm = ref({ hardwareCode: '', hardwareName: '', unit: '个', salePrice: 0, stockMode: 'STOCK' })
-const blankQuoteItem = () => ({ productCategory: 'CUSTOM', productName: '', specification: '', quantity: 1, unit: '件', unitPrice: 0, discountEligible: true, productId: null, hardwareItemId: null, remark: '' })
+const blankQuoteItem = () => ({ productCategory: 'CUSTOM', productName: '', specification: '', materialStructure: '', handleColor: '', widthMm: 0, heightMm: 0, thicknessMm: 0, quantity: 1, hingeHole: '', processDesc: '', attachmentName: '', attachmentPath: '', unit: 'm2', baseUnitPrice: 0, selectedRuleIds: [], customRules: [], discountEligible: true, nonDiscountRuleIds: [], nonDiscountCustomRuleNames: [], productionProcess: '', technician: '', productId: null, hardwareItemId: null, newRule: { ruleName: '', adjustMode: 'FIXED_PER_M2', adjustValue: 0, unitDesc: '元/平方', discountEligible: true } })
 const quoteForm = ref({ discountRate: 1, quoteDesc: '', items: [blankQuoteItem()] })
 
 onMounted(refreshAll)
 
 async function refreshAll() {
-  await Promise.all([loadCustomers(), loadOrders(), loadLines(), loadFactoryOrders(), loadCommercial(), loadAccounts(), loadHardware()])
+  await Promise.all([loadCustomers(), loadOrders(), loadLines(), loadFactoryOrders(), loadCommercial(), loadAccounts(), loadHardware(), loadQuoteRules(), loadCompanyProfile(), loadCatalogs()])
 }
 async function openTab(tab) { activeTab.value = tab; if (tab === 'CAD评审') await loadReviewPool(); if (tab === '商务财务') await loadCommercial() }
 async function loadCustomers() { customers.value = (await api.listCustomers('')).data.data || [] }
@@ -156,27 +190,41 @@ async function loadFactoryOrders() { factoryOrders.value = (await api.listFactor
 async function loadCommercial() { commercialOrders.value = (await api.listCommercialOrdersV3()).data.data || []; queues.value = (await api.getOrderFlowWorkQueues()).data.data || {} }
 async function loadAccounts() { accounts.value = (await api.listReceivingAccountsV3()).data.data || [] }
 async function loadHardware() { hardware.value = (await api.listHardwareItemsV3('')).data.data || [] }
+async function loadCatalogs() { const [p,m]=await Promise.all([api.listProducts(''),api.listMaterials('')]); products.value=p.data.data||[]; materials.value=m.data.data||[] }
+async function loadQuoteRules() { quoteRules.value = (await api.listQuoteRules('', '')).data.data || [] }
+async function loadCompanyProfile() { const row = (await api.getCompanyProfileV3()).data.data || {}; companyProfile.value = { companyName: row.company_name || '', logoPath: row.logo_path || '', companyAddress: row.company_address || '', contactPhone: row.contact_phone || '' } }
 function customerName(id) { return customers.value.find(c => String(c.id) === String(id))?.customerName || '-' }
 function money(value) { return Number(value || 0).toFixed(2) }
 function message(error) { window.alert(error?.response?.data?.message || error?.message || '操作失败') }
 
-async function createOrder() { try { await api.createCustomerOrder({ ...orderForm.value, customerId: Number(orderForm.value.customerId), projectId: null }); orderForm.value = { customerId: '', customerOrderNo: '', customerOrderName: '', remark: '' }; await loadOrders() } catch (e) { message(e) } }
+async function createOrder() { try { await api.createCustomerOrder({ ...orderForm.value, customerId: Number(orderForm.value.customerId), projectId: null, customerOrderName: null }); orderForm.value = { customerId: '', customerOrderNo: '', remark: '' }; await loadOrders() } catch (e) { message(e) } }
 async function uploadCad(id, event) { const file = event.target.files?.[0]; if (!file) return; try { await api.uploadCustomerOrderCad(id, file); window.alert('CAD已上传') } catch (e) { message(e) } finally { event.target.value = '' } }
 async function claimReview(id) { try { await api.claimCustomerOrderReview(id); await loadReviewPool(); await loadOrders() } catch (e) { message(e) } }
 async function selectForSplit(order) { selectedCustomerOrderId.value = String(order.id); activeTab.value = '拆单确认'; await loadDrafts() }
 async function loadDrafts() { if (!selectedCustomerOrderId.value) { drafts.value = []; return }; drafts.value = (await api.listSplitDrafts(Number(selectedCustomerOrderId.value))).data.data || [] }
 async function saveDraft() { try { await api.addSplitDraft(Number(selectedCustomerOrderId.value), { ...draftForm.value, productionLineId: Number(draftForm.value.productionLineId), parentFactoryOrderId: draftForm.value.parentFactoryOrderId || null }); draftForm.value = { factoryOrderName: '', productionLineId: '', orderType: 'NORMAL', parentFactoryOrderId: '', remark: '' }; await loadDrafts() } catch (e) { message(e) } }
 async function confirmSplit() { try { await api.confirmCustomerOrderSplit(Number(selectedCustomerOrderId.value)); await Promise.all([loadDrafts(), loadFactoryOrders(), loadOrders()]) } catch (e) { message(e) } }
-async function claimFactory(id) { try { await api.claimFactoryOrderV3(id); await loadFactoryOrders() } catch (e) { message(e) } }
+async function claimFactory(id) { try { const row=(await api.claimFactoryOrderV3(id)).data.data; await loadFactoryOrders(); await openQuote(row) } catch (e) { message(e) } }
 async function assignFactory(order) { const userId = window.prompt('请输入新的报价负责人用户ID'); if (!userId) return; const reason = window.prompt('填写指定或转交原因') || ''; try { await api.assignFactoryOrderV3(order.factory_order_id, { userId: Number(userId), reason }); await loadFactoryOrders() } catch (e) { message(e) } }
-function openQuote(order) { quoteFactory.value = order; quoteForm.value = { discountRate: Number(order.discount_rate || 1), quoteDesc: '', items: [blankQuoteItem()] } }
+async function openQuote(order) { quoteFactory.value = order; quoteForm.value = { discountRate: Number(order.discount_rate || 1), quoteDesc: '', items: [blankQuoteItem()] }; const versions = (await api.listFactoryOrderQuotesV3(order.factory_order_id)).data.data || []; if (versions.length) { const full = (await api.getFactoryOrderQuoteV3(versions[0].id)).data.data; quoteForm.value = { discountRate: Number(full.discount_rate || 1), quoteDesc: full.quote_desc || '', items: (full.items || []).map(savedQuoteItem) } } }
 function addQuoteItem() { quoteForm.value.items.push(blankQuoteItem()) }
 function onQuoteCategory(item) { if (item.productCategory === 'HARDWARE') item.discountEligible = false }
-async function submitQuote() { try { await api.saveFactoryOrderQuoteV3(quoteFactory.value.factory_order_id, { ...quoteForm.value, submit: true }); quoteFactory.value = null; await Promise.all([loadFactoryOrders(), loadCommercial()]) } catch (e) { message(e) } }
-async function openCommercial(order) { commercialDetail.value = (await api.getCommercialDetailV3(order.id)).data.data || {}; adjustmentForm.value.finalAmount = Number(order.final_receivable_amount || order.quote_total_amount || 0) }
+function selectCatalogItem(item) { if (item.productCategory === 'HARDWARE') { const h = hardware.value.find(x => x.hardware_name === item.productName); if (!h) return; item.hardwareItemId = h.id; item.baseUnitPrice = Number(h.sale_price || 0); item.unit = h.unit || '个'; item.discountEligible = false; return } const p=products.value.find(x=>(x.model||x.product_name)===item.productName); if(!p)return; item.productId=p.id; item.baseUnitPrice=Number(p.unit_price||0); item.materialStructure=p.material_name||item.materialStructure; item.handleColor=p.handle_color||item.handleColor; item.thicknessMm=Number(p.thickness||item.thicknessMm||0) }
+function toggleRule(item, rule, event) { if (event.target.checked) item.selectedRuleIds.push(rule.id); else { item.selectedRuleIds = item.selectedRuleIds.filter(id => id !== rule.id); item.nonDiscountRuleIds = item.nonDiscountRuleIds.filter(id => id !== rule.id) } }
+function toggleRuleDiscount(item, rule, event) { if (event.target.checked) item.nonDiscountRuleIds = item.nonDiscountRuleIds.filter(id => id !== rule.id); else if (!item.nonDiscountRuleIds.includes(rule.id)) item.nonDiscountRuleIds.push(rule.id) }
+function addCustomRule(item) { const r = { ...item.newRule, sourceRuleId: null, unitDesc: item.newRule.adjustMode === 'PERCENT' ? '%' : (item.newRule.adjustMode === 'FIXED_PER_ITEM' ? '元/件' : '元/平方'), ruleQuantity: item.quantity }; if (!r.ruleName) return; item.customRules.push(r); if (!r.discountEligible) item.nonDiscountCustomRuleNames.push(r.ruleName); item.newRule = { ruleName: '', adjustMode: 'FIXED_PER_M2', adjustValue: 0, unitDesc: '元/平方', discountEligible: true } }
+function removeCustomRule(item, index) { const [r] = item.customRules.splice(index,1); item.nonDiscountCustomRuleNames = item.nonDiscountCustomRuleNames.filter(name => name !== r.ruleName) }
+async function uploadQuoteImage(item,event) { const file=event.target.files?.[0]; if(!file) return; try { const row=(await api.uploadQuoteAttachmentV3(file)).data.data; item.attachmentName=row.fileName; item.attachmentPath=row.filePath } catch(e){ message(e) } }
+function savedQuoteItem(row) { const item=blankQuoteItem(); Object.assign(item,{ productCategory:row.product_category,productName:row.product_name,specification:row.specification||'',materialStructure:row.material_structure||'',handleColor:row.handle_color||'',widthMm:Number(row.width_mm||0),heightMm:Number(row.height_mm||0),thicknessMm:Number(row.thickness_mm||0),quantity:Number(row.quantity||1),hingeHole:row.hinge_hole||'',processDesc:row.process_desc||'',attachmentName:row.attachment_name||'',attachmentPath:row.attachment_path||'',unit:row.unit||'m2',baseUnitPrice:Number(row.base_unit_price||0),selectedRuleIds:String(row.selected_rule_ids||'').split(',').filter(Boolean).map(Number),customRules:row.custom_rule_json ? JSON.parse(row.custom_rule_json) : [],discountEligible:Number(row.discount_eligible)===1,nonDiscountRuleIds:(row.extra_prices||[]).filter(x=>Number(x.discount_eligible)===0&&x.source_rule_id).map(x=>Number(x.source_rule_id)),nonDiscountCustomRuleNames:(row.extra_prices||[]).filter(x=>Number(x.discount_eligible)===0&&!x.source_rule_id).map(x=>x.rule_name),productionProcess:row.production_process||'',technician:row.technician||'',productId:row.product_id,hardwareItemId:row.hardware_item_id }); return item }
+async function submitQuote(submit) { try { await api.saveFactoryOrderQuoteV3(quoteFactory.value.factory_order_id, { ...quoteForm.value, submit }); if(submit) quoteFactory.value = null; await Promise.all([loadFactoryOrders(), loadCommercial()]); window.alert(submit?'报价版本已提交':'报价草稿已保存') } catch (e) { message(e) } }
+async function openCommercial(order) { commercialDetail.value = (await api.getCommercialDetailV3(order.id)).data.data || {}; adjustmentForm.value.finalAmount = Number(order.final_receivable_amount || order.quote_total_amount || 0); pdfForm.value.taxRate=Number(commercialDetail.value.order?.tax_rate||0); pdfForm.value.validDays=Number(commercialDetail.value.order?.quote_valid_days||15); quotePdfs.value=(await api.listCustomerQuotePdfsV3(order.id)).data.data||[] }
 async function submitAdjustment() { try { await api.requestPriceAdjustmentV3(commercialDetail.value.order.id, adjustmentForm.value); await loadCommercial() } catch (e) { message(e) } }
 async function approveAdjustment(id, approved) { try { await api.approvePriceAdjustmentV3(id, { approved, remark: '' }); await loadCommercial() } catch (e) { message(e) } }
-async function confirmQuote() { try { await api.confirmCustomerQuoteV3(commercialDetail.value.order.id, { ...confirmationForm.value, confirmedAt: new Date().toISOString(), attachmentPath: null }); await loadCommercial() } catch (e) { message(e) } }
+async function confirmQuote() { try { await api.confirmCustomerQuoteV3(commercialDetail.value.order.id, { ...confirmationForm.value, pdfId:Number(confirmationForm.value.pdfId), confirmedAt: new Date().toISOString(), attachmentPath: null }); await loadCommercial(); await openCommercial({id:commercialDetail.value.order.id,final_receivable_amount:commercialDetail.value.order.final_receivable_amount}) } catch (e) { message(e) } }
+async function generatePdf() { try { await api.generateCustomerQuotePdfV3(commercialDetail.value.order.id,pdfForm.value); quotePdfs.value=(await api.listCustomerQuotePdfsV3(commercialDetail.value.order.id)).data.data||[] } catch(e){ message(e) } }
+async function downloadPdf(row) { try { const response=await api.downloadCustomerQuotePdfV3(row.id); const url=URL.createObjectURL(response.data); const a=document.createElement('a'); a.href=url; a.download=`${commercialDetail.value.order.customer_order_no}_报价单_V${row.pdf_version}.pdf`; a.click(); URL.revokeObjectURL(url) } catch(e){ message(e) } }
+async function saveCompanyProfile() { try { await api.updateCompanyProfileV3(companyProfile.value); window.alert('公司资料已保存') } catch(e){ message(e) } }
+async function uploadCompanyLogo(event) { const file=event.target.files?.[0]; if(!file)return; try { const row=(await api.uploadQuoteAttachmentV3(file)).data.data; companyProfile.value.logoPath=row.filePath } catch(e){ message(e) } }
 async function submitPaymentPlan() { try { await api.createPaymentPlanV3(commercialDetail.value.order.id, { settlementType: paymentPlanForm.value.settlementType, customerConfirmed: true, installments: [{ installmentNo: 1, plannedAmount: Number(paymentPlanForm.value.amount), dueDate: paymentPlanForm.value.dueDate }] }); await loadCommercial() } catch (e) { message(e) } }
 async function submitReceipt() { try { await api.submitPaymentReceiptV3(commercialDetail.value.order.id, { ...receiptForm.value, receivingAccountId: receiptForm.value.receivingAccountId ? Number(receiptForm.value.receivingAccountId) : null, receivedAt: new Date().toISOString(), paymentPlanId: null, bankReference: '', voucherPath: null }); await loadCommercial() } catch (e) { message(e) } }
 async function confirmReceipt(id, approved) { try { await api.confirmPaymentReceiptV3(id, { approved, remark: '' }); await loadCommercial() } catch (e) { message(e) } }
@@ -190,5 +238,5 @@ async function addHardware() { try { await api.createHardwareItemV3({ ...hardwar
 </script>
 
 <style scoped>
-.flow-page{display:grid;gap:14px}.flow-tabs{display:flex;gap:4px;border-bottom:1px solid #d7dce2}.flow-tabs button{border:0;background:transparent;padding:10px 14px}.flow-tabs button.active{color:#116149;border-bottom:2px solid #116149;font-weight:700}.flow-section{display:grid;gap:14px}.section-head{display:flex;align-items:center;justify-content:space-between}.section-head h2,.config-band h2{font-size:17px;margin:0}.form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}.form-row label{display:grid;gap:5px;font-size:12px;color:#4d5965}.form-row input,.form-row select,.section-head select{width:100%;height:36px;border:1px solid #cfd6dd;padding:0 9px;background:#fff}.form-row button,.section-head button,.table-wrap button,.queue-row button,.action-bar button{height:34px;border:1px solid #c8d0d8;background:#fff;padding:0 11px}.primary{background:#116149!important;border-color:#116149!important;color:#fff}.align-end{align-self:end}.table-wrap{overflow:auto;border-top:1px solid #d9dee3}.table-wrap table{width:100%;border-collapse:collapse;white-space:nowrap}.table-wrap th,.table-wrap td{padding:9px 10px;border-bottom:1px solid #e4e8ec;text-align:left;font-size:12px}.table-wrap th{background:#f5f7f8;color:#52606c}.file-action{cursor:pointer;color:#116149}.file-action input{display:none}.action-bar{display:flex;justify-content:flex-end}.commercial-panel{border-top:1px solid #d9dee3;border-bottom:1px solid #d9dee3;padding:14px 0;display:grid;gap:12px}.commercial-panel h3{margin:0;font-size:15px}.check{display:flex!important;grid-template-columns:18px 1fr!important;align-items:center;height:36px}.check input{width:16px;height:16px}.queue-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.queue-grid>div{border-top:2px solid #87939d;padding-top:8px}.queue-grid h3{font-size:14px;margin:0 0 8px}.queue-row{display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid #e6eaed;font-size:12px}.queue-row span{flex:1}.config-band{display:grid;gap:10px;padding-bottom:14px;border-bottom:1px solid #d9dee3}.tag-list{display:flex;flex-wrap:wrap;gap:6px}.tag-list span{border:1px solid #d5dbe0;padding:5px 8px;font-size:12px}@media(max-width:700px){.flow-tabs{overflow:auto}.form-row{grid-template-columns:1fr}.queue-grid{grid-template-columns:1fr}}
+.flow-page{display:grid;gap:14px}.flow-tabs{display:flex;gap:4px;border-bottom:1px solid #d7dce2}.flow-tabs button{border:0;background:transparent;padding:10px 14px}.flow-tabs button.active{color:#116149;border-bottom:2px solid #116149;font-weight:700}.flow-section{display:grid;gap:14px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.section-head h2,.config-band h2{font-size:17px;margin:0}.section-head>div{display:flex;gap:6px}.form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}.form-row label{display:grid;gap:5px;font-size:12px;color:#4d5965}.form-row input,.form-row select,.section-head select{width:100%;height:36px;border:1px solid #cfd6dd;padding:0 9px;background:#fff}.form-row button,.section-head button,.table-wrap button,.queue-row button,.action-bar button,.quote-item-editor button{height:34px;border:1px solid #c8d0d8;background:#fff;padding:0 11px}.primary{background:#116149!important;border-color:#116149!important;color:#fff}.align-end{align-self:end}.table-wrap{overflow:auto;border-top:1px solid #d9dee3}.table-wrap table{width:100%;border-collapse:collapse;white-space:nowrap}.table-wrap th,.table-wrap td{padding:9px 10px;border-bottom:1px solid #e4e8ec;text-align:left;font-size:12px}.table-wrap th{background:#f5f7f8;color:#52606c}.file-action{cursor:pointer;color:#116149}.file-action input{display:none}.action-bar{display:flex;justify-content:flex-end}.commercial-panel{border-top:1px solid #d9dee3;border-bottom:1px solid #d9dee3;padding:14px 0;display:grid;gap:12px}.commercial-panel h3{margin:0;font-size:15px}.check{display:flex!important;grid-template-columns:18px 1fr!important;align-items:center;height:36px}.check input{width:16px;height:16px}.quote-item-editor{border:1px solid #d9dee3;padding:10px;display:grid;gap:10px}.quote-item-head{display:flex;justify-content:space-between;align-items:center}.quote-fields{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px}.quote-fields label{display:grid;gap:4px;font-size:12px}.quote-fields input,.quote-fields select,.custom-rule-row input,.custom-rule-row select{height:32px;border:1px solid #cfd6dd;padding:0 7px;min-width:0}.rule-area{border-top:1px solid #e1e5e9;padding-top:9px;display:grid;gap:8px}.rule-list{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:5px}.rule-list label{font-size:12px;display:flex;align-items:center;gap:5px}.custom-rule-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:7px;align-items:center}.queue-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.queue-grid>div{border-top:2px solid #87939d;padding-top:8px}.queue-grid h3{font-size:14px;margin:0 0 8px}.queue-row{display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid #e6eaed;font-size:12px}.queue-row span{flex:1}.config-band{display:grid;gap:10px;padding-bottom:14px;border-bottom:1px solid #d9dee3}.tag-list{display:flex;flex-wrap:wrap;gap:6px}.tag-list span{border:1px solid #d5dbe0;padding:5px 8px;font-size:12px}@media(max-width:1000px){.quote-fields{grid-template-columns:repeat(3,1fr)}.rule-list{grid-template-columns:1fr}}@media(max-width:700px){.flow-tabs{overflow:auto}.form-row,.quote-fields,.custom-rule-row{grid-template-columns:1fr}.queue-grid{grid-template-columns:1fr}}
 </style>
