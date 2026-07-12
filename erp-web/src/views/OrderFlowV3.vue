@@ -1,9 +1,5 @@
 <template>
   <div class="flow-page">
-    <div class="flow-tabs">
-      <button v-for="tab in tabs" :key="tab" :class="{ active: activeTab === tab }" @click="openTab(tab)">{{ tab }}</button>
-    </div>
-
     <section v-if="activeTab === '客户订单'" class="flow-section">
       <div class="section-head"><h2>客户订单</h2><button class="primary" @click="createOrder">新建</button></div>
       <div class="form-row">
@@ -136,10 +132,16 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import * as api from '../api/contract'
 
-const tabs = ['客户订单', 'CAD评审', '拆单确认', '工厂订单', '商务财务', '配置']
+const props = defineProps({ view: { type: String, default: '客户订单' } })
+const viewTabs = {
+  客户订单: '客户订单', CAD评审池: 'CAD评审', 拆单确认: '拆单确认', 工厂订单: '工厂订单', 补单管理: '工厂订单',
+  报价订单池: '工厂订单', 完整报价明细: '工厂订单', 报价版本: '工厂订单', 客户报价汇总: '商务财务', 报价PDF与客户确认: '商务财务',
+  付款计划: '商务财务', 到账确认: '商务财务', 价格调整审批: '商务财务', 下料放行: '商务财务', 月结与逾期: '商务财务',
+  生产线配置: '配置', 五金资料: '配置', 库存管理: '配置', 收款账户配置: '配置',
+}
 const activeTab = ref('客户订单')
 const customers = ref([])
 const orderRows = ref([])
@@ -178,10 +180,16 @@ const quoteForm = ref({ discountRate: 1, quoteDesc: '', items: [blankQuoteItem()
 
 onMounted(refreshAll)
 
+watch(() => props.view, async (view) => {
+  const tab = viewTabs[view] || '客户订单'
+  activeTab.value = tab
+  if (tab === 'CAD评审') await loadReviewPool()
+  if (tab === '商务财务') await loadCommercial()
+}, { immediate: true })
+
 async function refreshAll() {
   await Promise.all([loadCustomers(), loadOrders(), loadLines(), loadFactoryOrders(), loadCommercial(), loadAccounts(), loadHardware(), loadQuoteRules(), loadCompanyProfile(), loadCatalogs()])
 }
-async function openTab(tab) { activeTab.value = tab; if (tab === 'CAD评审') await loadReviewPool(); if (tab === '商务财务') await loadCommercial() }
 async function loadCustomers() { customers.value = (await api.listCustomers('')).data.data || [] }
 async function loadOrders() { orderRows.value = (await api.listCustomerOrders(null, null, '')).data.data || [] }
 async function loadReviewPool() { reviewPool.value = (await api.listReviewPoolV3()).data.data || [] }

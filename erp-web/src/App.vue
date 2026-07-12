@@ -49,10 +49,10 @@
       </div>
 
       <div class="menu-group" v-for="module in filteredModules" :key="module.name">
-        <button class="module-btn" :class="{ active: activeModule === module.name, icononly: sidebarCollapsed }" @click="switchModule(module.name)" :title="sidebarCollapsed ? module.name : ''">
+        <button class="module-btn" :class="{ active: activeModule === module.name, icononly: sidebarCollapsed, disabled: !moduleAllowed(module.name) }" @click="switchModule(module.name)" :title="moduleAllowed(module.name) ? moduleDisplayName(module.name) : `${moduleDisplayName(module.name)}（无权限）`">
           <span class="module-btn-main">
             <span class="module-icon">{{ menuIcon(module.name) }}</span>
-            <span v-if="!sidebarCollapsed" class="module-name">{{ module.name }}</span>
+            <span v-if="!sidebarCollapsed" class="module-name">{{ moduleDisplayName(module.name) }}</span>
           </span>
           <span class="badge" v-if="!sidebarCollapsed">{{ module.children.length }}</span>
           <span class="badge-dot" v-else-if="module.children.length > 0">{{ module.children.length }}</span>
@@ -62,8 +62,8 @@
             v-for="sub in module.children"
             :key="sub"
             class="sub-btn"
-            :class="{ active: activeSubModule === sub }"
-            @click="switchSubModule(sub)"
+            :class="{ active: activeSubModule === subName(sub) }"
+            @click="switchSubModule(subName(sub))"
           >
             {{ sub }}
           </button>
@@ -74,8 +74,8 @@
     <main class="workspace">
       <header class="topbar">
         <div class="topbar-left">
-          <h1>{{ activeSubModule }}</h1>
-          <p v-if="!isCustomerArchivePage" class="crumb">{{ activeModule }} / {{ activeSubModule }}</p>
+          <h1>{{ activeSubTitle }}</h1>
+          <p v-if="!isCustomerArchivePage" class="crumb">{{ moduleDisplayName(activeModule) }} / {{ activeSubTitle }}</p>
         </div>
         <div class="top-search" v-if="!isCustomerArchivePage">
           <input
@@ -861,11 +861,11 @@
         <CustomerProjectProfile />
       </section>
 
-      <section class="customer-profile-host" v-if="activeModule === C.order && activeSubModule === '客户订单流程'">
-        <OrderFlowV3 />
+      <section class="customer-profile-host" v-if="v3SubModules.has(activeSubModule)">
+        <OrderFlowV3 :view="activeSubModule" />
       </section>
 
-      <section class="card" v-if="activeModule !== C.master && !(activeModule === C.quote && ['报价明细','报价单主表','深化订单池'].includes(activeSubModule)) && !(activeModule === C.order && ['项目订单','订单状态','客户订单流程'].includes(activeSubModule)) && !isCustomerArchivePage">
+      <section class="card" v-if="activeModule !== C.master && !v3SubModules.has(activeSubModule) && !isCustomerArchivePage">
         <p>当前为「{{ activeSubModule }}」独立页面占位，后续按你的业务继续逐页补齐。</p>
       </section>
     </main>
@@ -1601,14 +1601,20 @@ const C = {
 }
 
 const modules = [
-  { name: C.master, children: [C.staff, C.userAuth, C.product, C.materialData, C.processRule, C.priceRule] },
-  { name: C.customer, children: ['客户档案'] },
-  { name: C.order, children: ['客户订单流程'] },
-  { name: C.schedule, children: ['订单管理', '板材清单', '五金清单', 'BOM清单'] },
-  { name: C.production, children: ['生产任务', '排产计划', '工序进度', '质检包装'] },
-  { name: C.purchase, children: ['采购申请', '采购订单', '库存管理', '出入库记录'] },
-  { name: C.finance, children: ['收款管理', '付款管理', '成本核算', '经营看板'] },
+  { name: C.master, children: ['1.1 人员管理', '1.2 账号权限', '1.3 产品资料', '1.4 材料资料', '1.5 工艺规则', '1.6 价格规则', '1.7 生产线配置'] },
+  { name: C.customer, children: ['2.1 客户档案', '2.2 客户项目', '2.3 跟进记录', '2.4 客户需求'] },
+  { name: C.order, children: ['3.1 客户订单', '3.2 CAD评审池', '3.3 拆单确认', '3.4 工厂订单', '3.5 补单管理', '3.6 售后管理'] },
+  { name: C.quote, children: ['4.1 报价订单池', '4.2 完整报价明细', '4.3 报价版本', '4.4 客户报价汇总', '4.5 报价PDF与客户确认'] },
+  { name: C.schedule, children: ['5.1 待下料订单', '5.2 板材清单', '5.3 五金清单', '5.4 BOM清单'] },
+  { name: C.production, children: ['6.1 生产任务', '6.2 排产计划', '6.3 工序进度', '6.4 质检包装'] },
+  { name: C.purchase, children: ['7.1 五金资料', '7.2 库存管理', '7.3 采购申请', '7.4 采购订单', '7.5 出入库记录'] },
+  { name: C.finance, children: ['8.1 付款计划', '8.2 到账确认', '8.3 价格调整审批', '8.4 下料放行', '8.5 月结与逾期', '8.6 收款账户配置'] },
 ]
+
+const moduleNumbers = { [C.master]: '1', [C.customer]: '2', [C.order]: '3', [C.quote]: '4', [C.schedule]: '5', [C.production]: '6', [C.purchase]: '7', [C.finance]: '8' }
+const moduleDisplayName = (name) => moduleNumbers[name] ? `${moduleNumbers[name]}. ${name}` : name
+const subName = (name) => String(name || '').replace(/^\d+\.\d+\s+/, '')
+const v3SubModules = new Set(['生产线配置', '客户订单', 'CAD评审池', '拆单确认', '工厂订单', '补单管理', '报价订单池', '完整报价明细', '报价版本', '客户报价汇总', '报价PDF与客户确认', '五金资料', '库存管理', '付款计划', '到账确认', '价格调整审批', '下料放行', '月结与逾期', '收款账户配置'])
 
 const menuKeyword = ref('')
 const sidebarCollapsed = ref(false)
@@ -1866,12 +1872,15 @@ const restoringUndo = ref(false)
 const quoteEditBaseline = ref('')
 
 const filteredModules = computed(() => {
-  const moduleScope = new Set((allowedModules.value || []).filter(Boolean))
-  const base = modules.filter((m) => moduleScope.size === 0 || moduleScope.has(m.name))
   const kw = menuKeyword.value.trim()
-  if (!kw) return base
-  return base.filter((m) => m.name.includes(kw) || m.children.some((c) => c.includes(kw)))
+  if (!kw) return modules
+  return modules.filter((m) => moduleDisplayName(m.name).includes(kw) || m.children.some((c) => c.includes(kw)))
 })
+const moduleAllowed = (name) => {
+  const scope = (allowedModules.value || []).filter(Boolean)
+  return scope.length === 0 || scope.includes(name)
+}
+const activeSubTitle = computed(() => modules.find((m) => m.name === activeModule.value)?.children.find((s) => subName(s) === activeSubModule.value) || activeSubModule.value)
 const isMasterDataPage = computed(() => activeModule.value === C.master && [C.staff, C.userAuth, C.product, C.materialData].includes(activeSubModule.value))
 const showFilterBtn = computed(() => !batchMode.value && activeModule.value === C.master)
 const showImportBtn = computed(() => !batchMode.value && activeModule.value === C.master && [C.staff, C.product, C.materialData].includes(activeSubModule.value))
@@ -2412,10 +2421,11 @@ async function bootstrapAfterLogin() {
 }
 
 function switchModule(moduleName) {
+  if (!moduleAllowed(moduleName)) return
   if (!confirmLeaveEditIfNeeded()) return
   exitBatchMode()
   activeModule.value = moduleName
-  const first = filteredModules.value.find((m) => m.name === moduleName)?.children[0] || ''
+  const first = subName(modules.find((m) => m.name === moduleName)?.children[0] || '')
   activeSubModule.value = first
   resetSubModuleState(first)
   refreshSubModuleData(first)
@@ -6024,6 +6034,8 @@ pre { background: rgba(5, 18, 32, 0.9); border: 1px solid rgba(57, 120, 182, 0.3
 .module-icon { width: 20px; text-align: center; opacity: .9; }
 .module-name { color: inherit; }
 .module-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.module-btn.disabled { opacity: .42; cursor: not-allowed; }
+.module-btn.disabled:hover { background: transparent; color: inherit; }
 .module-btn.active {
   background: rgba(246, 180, 0, 0.16);
   color: #fff;
