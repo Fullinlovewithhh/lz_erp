@@ -285,27 +285,27 @@ public class ContractService {
         return project;
     }
 
-    private CustomerOrder requireCustomerOrder(Long customerOrderId, Long projectId, Long customerId) {
+    private CustomerOrder requireCustomerOrder(Long customerOrderId, Long customerId) {
         if (customerOrderId == null) throw new IllegalArgumentException("customerOrderId is required");
         CustomerOrder customerOrder = customerOrderMapper.selectById(customerOrderId);
         if (customerOrder == null || Integer.valueOf(1).equals(customerOrder.getIsDeleted())) {
             throw new IllegalArgumentException("customer order not found");
         }
-        if (!projectId.equals(customerOrder.getProjectId()) || !customerId.equals(customerOrder.getCustomerId())) {
-            throw new IllegalArgumentException("customer order must belong to the selected project");
+        if (!customerId.equals(customerOrder.getCustomerId())) {
+            throw new IllegalArgumentException("customer order must belong to the selected customer");
         }
         return customerOrder;
     }
 
     private CustomerOrder resolveCustomerOrder(Long customerOrderId, String customerOrderNo, Project project, Customer customer) {
         if (customerOrderId != null) {
-            return requireCustomerOrder(customerOrderId, project.getProjectId(), customer.getId());
+            return requireCustomerOrder(customerOrderId, customer.getId());
         }
         String orderNo = normalizeText(customerOrderNo);
         if (orderNo == null) throw new IllegalArgumentException("customerOrderNo is required");
 
         CustomerOrder existing = customerOrderMapper.selectOne(new LambdaQueryWrapper<CustomerOrder>()
-                .eq(CustomerOrder::getProjectId, project.getProjectId())
+                .eq(CustomerOrder::getCustomerId, customer.getId())
                 .eq(CustomerOrder::getCustomerOrderNo, orderNo)
                 .eq(CustomerOrder::getIsDeleted, 0)
                 .last("LIMIT 1"));
@@ -318,7 +318,6 @@ public class ContractService {
 
         CustomerOrder created = new CustomerOrder();
         created.setCustomerId(customer.getId());
-        created.setProjectId(project.getProjectId());
         created.setCustomerOrderNo(orderNo);
         created.setCustomerOrderName(orderNo);
         created.setStatus("启用");

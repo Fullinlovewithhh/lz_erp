@@ -122,9 +122,8 @@ public class QuoteDocumentService {
     private Map<String, Object> orderSummary(Long id) {
         return jdbcTemplate.queryForMap("""
                 SELECT co.*,c.customer_name,c.phone AS customer_phone,c.address AS customer_address,
-                       p.project_name,s.display_name AS service_staff_name
+                       s.display_name AS service_staff_name
                 FROM customer_order co JOIN customer c ON c.id=co.customer_id
-                LEFT JOIN project p ON p.project_id=co.project_id
                 LEFT JOIN app_user s ON s.id=co.service_staff_id WHERE co.id=? AND co.is_deleted=0
                 """, id);
     }
@@ -203,7 +202,6 @@ public class QuoteDocumentService {
         PdfPTable info = new PdfPTable(new float[]{1, 2, 1, 2}); info.setWidthPercentage(100);
         addPair(info, "客户名称", order.get("customer_name"), head, normal);
         addPair(info, "客户订单号", order.get("customer_order_no"), head, normal);
-        addPair(info, "项目名称", value(order.get("project_name")), head, normal);
         addPair(info, "客户联系人", value(order.get("customer_name")), head, normal);
         addPair(info, "报价日期", LocalDate.now(), head, normal);
         addPair(info, "有效期", validDays + "天", head, normal);

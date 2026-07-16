@@ -48,10 +48,10 @@ public class CustomerService {
         if (customer == null) {
             throw new IllegalArgumentException("customer not found");
         }
-        Integer projectCnt = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM project WHERE customer_id = ? AND is_deleted = 0", Integer.class, id);
-        Integer orderCnt = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM contract WHERE customer_id = ?", Integer.class, id);
-        if ((projectCnt != null && projectCnt > 0) || (orderCnt != null && orderCnt > 0)) {
-            throw new IllegalArgumentException("该客户已有项目/订单，不能删除");
+        Integer orderCnt = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM customer_order WHERE customer_id = ? AND is_deleted = 0", Integer.class, id);
+        Integer legacyOrderCnt = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM contract WHERE customer_id = ?", Integer.class, id);
+        if ((orderCnt != null && orderCnt > 0) || (legacyOrderCnt != null && legacyOrderCnt > 0)) {
+            throw new IllegalArgumentException("该客户已有订单，不能删除");
         }
         customerMapper.deleteById(id);
     }

@@ -5,8 +5,6 @@ import lombok.Data;
 
 @Data
 public class CustomerOrderRequest {
-    private Long projectId;
-
     private Long customerId;
 
     @NotBlank(message = "customerOrderNo is required")

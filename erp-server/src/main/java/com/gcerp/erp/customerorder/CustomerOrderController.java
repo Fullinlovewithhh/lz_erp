@@ -25,10 +25,9 @@ public class CustomerOrderController {
     }
 
     @GetMapping
-    public ApiResponse<List<CustomerOrder>> list(@RequestParam(required = false) Long projectId,
-                                                 @RequestParam(required = false) Long customerId,
+    public ApiResponse<List<CustomerOrder>> list(@RequestParam(required = false) Long customerId,
                                                  @RequestParam(required = false) String keyword) {
-        return ApiResponse.ok(customerOrderService.list(projectId, customerId, keyword));
+        return ApiResponse.ok(customerOrderService.list(customerId, keyword));
     }
 
     @GetMapping("/{id}")

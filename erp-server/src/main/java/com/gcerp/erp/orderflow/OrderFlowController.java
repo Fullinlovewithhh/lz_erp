@@ -80,9 +80,9 @@ public class OrderFlowController {
         return ApiResponse.ok(service.listSplitDrafts(id));
     }
 
-    @PostMapping("/customer-orders/{id}/confirm-split")
-    public ApiResponse<List<Map<String, Object>>> confirmSplit(@PathVariable Long id) {
-        return ApiResponse.ok(service.confirmSplit(id));
+    @PostMapping("/customer-orders/{id}/submit-split")
+    public ApiResponse<List<Map<String, Object>>> submitSplit(@PathVariable Long id) {
+        return ApiResponse.ok(service.submitSplit(id));
     }
 
     @GetMapping("/factory-orders")

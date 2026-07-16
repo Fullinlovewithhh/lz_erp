@@ -159,8 +159,8 @@ export function createCustomerOrder(payload) {
   return http.post('/customer-orders', payload)
 }
 
-export function listCustomerOrders(projectId, customerId, keyword) {
-  return http.get('/customer-orders', { params: { projectId, customerId, keyword } })
+export function listCustomerOrders(customerId, keyword) {
+  return http.get('/customer-orders', { params: { customerId, keyword } })
 }
 
 export function createCustomerFollowup(payload) {
@@ -320,8 +320,8 @@ export function listSplitDrafts(id) {
   return http.get(`/order-flow/customer-orders/${id}/split-drafts`)
 }
 
-export function confirmCustomerOrderSplit(id) {
-  return http.post(`/order-flow/customer-orders/${id}/confirm-split`)
+export function submitCustomerOrderSplit(id) {
+  return http.post(`/order-flow/customer-orders/${id}/submit-split`)
 }
 
 export function listFactoryOrdersV3(customerOrderId, status) {

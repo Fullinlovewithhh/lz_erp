@@ -1602,8 +1602,8 @@ const C = {
 
 const modules = [
   { name: C.master, children: ['1.1 人员管理', '1.2 账号权限', '1.3 产品资料', '1.4 材料资料', '1.5 工艺规则', '1.6 价格规则', '1.7 生产线配置'] },
-  { name: C.customer, children: ['2.1 客户档案', '2.2 客户项目', '2.3 跟进记录', '2.4 客户需求'] },
-  { name: C.order, children: ['3.1 客户订单', '3.2 CAD评审池', '3.3 拆单确认', '3.4 工厂订单', '3.5 补单管理', '3.6 售后管理'] },
+  { name: C.customer, children: ['2.1 客户档案', '2.2 跟进记录', '2.3 客户需求'] },
+  { name: C.order, children: ['3.1 客户订单', '3.2 CAD评审池', '3.3 拆单', '3.4 工厂订单', '3.5 补单管理', '3.6 售后管理'] },
   { name: C.quote, children: ['4.1 报价订单池', '4.2 完整报价明细', '4.3 报价版本', '4.4 客户报价汇总', '4.5 报价PDF与客户确认'] },
   { name: C.schedule, children: ['5.1 待下料订单', '5.2 板材清单', '5.3 五金清单', '5.4 BOM清单'] },
   { name: C.production, children: ['6.1 生产任务', '6.2 排产计划', '6.3 工序进度', '6.4 质检包装'] },
@@ -1614,7 +1614,7 @@ const modules = [
 const moduleNumbers = { [C.master]: '1', [C.customer]: '2', [C.order]: '3', [C.quote]: '4', [C.schedule]: '5', [C.production]: '6', [C.purchase]: '7', [C.finance]: '8' }
 const moduleDisplayName = (name) => moduleNumbers[name] ? `${moduleNumbers[name]}. ${name}` : name
 const subName = (name) => String(name || '').replace(/^\d+\.\d+\s+/, '')
-const v3SubModules = new Set(['生产线配置', '客户订单', 'CAD评审池', '拆单确认', '工厂订单', '补单管理', '报价订单池', '完整报价明细', '报价版本', '客户报价汇总', '报价PDF与客户确认', '五金资料', '库存管理', '付款计划', '到账确认', '价格调整审批', '下料放行', '月结与逾期', '收款账户配置'])
+const v3SubModules = new Set(['生产线配置', '客户订单', 'CAD评审池', '拆单', '工厂订单', '补单管理', '报价订单池', '完整报价明细', '报价版本', '客户报价汇总', '报价PDF与客户确认', '五金资料', '库存管理', '付款计划', '到账确认', '价格调整审批', '下料放行', '月结与逾期', '收款账户配置'])
 
 const menuKeyword = ref('')
 const sidebarCollapsed = ref(false)

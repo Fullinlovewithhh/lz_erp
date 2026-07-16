@@ -38,12 +38,13 @@ public class V3SchemaInitializer implements ApplicationRunner {
                 """);
         jdbcTemplate.update("""
                 INSERT IGNORE INTO production_line(line_code,line_name,enabled,sort_order,created_at,updated_at)
-                VALUES ('L','L生产线',1,10,NOW(),NOW()),('V','V生产线',1,20,NOW(),NOW())
+                VALUES ('L','实木生产线',1,10,NOW(),NOW()),('V','板式生产线',1,20,NOW(),NOW())
                 """);
+        jdbcTemplate.update("UPDATE production_line SET line_name='实木生产线',updated_at=NOW() WHERE line_code='L' AND line_name='L生产线'");
+        jdbcTemplate.update("UPDATE production_line SET line_name='板式生产线',updated_at=NOW() WHERE line_code='V' AND line_name='V生产线'");
     }
 
     private void addCustomerOrderColumns() {
-        jdbcTemplate.execute("ALTER TABLE customer_order MODIFY project_id BIGINT NULL");
         addColumn("customer_order", "service_staff_id", "BIGINT NULL");
         addColumn("customer_order", "review_engineer_id", "BIGINT NULL");
         addColumn("customer_order", "review_status", "VARCHAR(30) NOT NULL DEFAULT '待领取'");
@@ -57,7 +58,7 @@ public class V3SchemaInitializer implements ApplicationRunner {
         addColumn("customer_order", "cutting_release_status", "VARCHAR(30) NOT NULL DEFAULT '未申请'");
         addColumn("customer_order", "tax_rate", "DECIMAL(6,4) NOT NULL DEFAULT 0");
         addColumn("customer_order", "quote_valid_days", "INT NOT NULL DEFAULT 15");
-        addUniqueIndex("customer_order", "uk_customer_order_customer_no", "customer_id, customer_order_no");
+        addUniqueIndex("customer_order", "uk_customer_order_no", "customer_order_no");
     }
 
     private void createBusinessTables() {

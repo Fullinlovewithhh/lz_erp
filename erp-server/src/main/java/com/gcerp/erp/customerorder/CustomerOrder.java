@@ -13,7 +13,6 @@ public class CustomerOrder {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long customerId;
-    private Long projectId;
     private String customerOrderNo;
     private String customerOrderName;
     private String remark;

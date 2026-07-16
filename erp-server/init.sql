@@ -123,27 +123,9 @@ CREATE TABLE IF NOT EXISTS customer (
   updated_at DATETIME NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS project (
-  project_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  project_no VARCHAR(50) NOT NULL UNIQUE,
-  project_name VARCHAR(100) NOT NULL,
-  customer_id BIGINT NOT NULL,
-  project_address VARCHAR(255) NULL,
-  project_status VARCHAR(50) NOT NULL DEFAULT '进行中',
-  project_manager VARCHAR(100) NULL,
-  remark TEXT NULL,
-  is_deleted TINYINT NOT NULL DEFAULT 0,
-  created_at DATETIME NOT NULL,
-  updated_at DATETIME NOT NULL,
-  KEY idx_project_customer_id (customer_id),
-  KEY idx_project_no (project_no),
-  KEY idx_project_name (project_name)
-);
-
 CREATE TABLE IF NOT EXISTS customer_order (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   customer_id BIGINT NOT NULL,
-  project_id BIGINT NULL,
   customer_order_no VARCHAR(255) NOT NULL,
   customer_order_name VARCHAR(255) NULL,
   service_staff_id BIGINT NULL,
@@ -165,9 +147,8 @@ CREATE TABLE IF NOT EXISTS customer_order (
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
   KEY idx_customer_order_customer_id (customer_id),
-  KEY idx_customer_order_project_id (project_id),
   KEY idx_customer_order_no (customer_order_no),
-  UNIQUE KEY uk_customer_order_customer_no (customer_id, customer_order_no)
+  UNIQUE KEY uk_customer_order_no (customer_order_no)
 );
 
 CREATE TABLE IF NOT EXISTS customer_followup (
@@ -826,7 +807,6 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 CREATE TABLE IF NOT EXISTS customer_order (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   customer_id BIGINT NOT NULL,
-  project_id BIGINT NULL,
   customer_order_no VARCHAR(255) NOT NULL,
   customer_order_name VARCHAR(255) NULL,
   service_staff_id BIGINT NULL,
@@ -848,9 +828,8 @@ CREATE TABLE IF NOT EXISTS customer_order (
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
   KEY idx_customer_order_customer_id (customer_id),
-  KEY idx_customer_order_project_id (project_id),
   KEY idx_customer_order_no (customer_order_no),
-  UNIQUE KEY uk_customer_order_customer_no (customer_id, customer_order_no)
+  UNIQUE KEY uk_customer_order_no (customer_order_no)
 );
 
 SET @sql = (
@@ -950,15 +929,13 @@ CALL add_index_if_missing('contract', 'idx_contract_factory_order_no', 'INDEX id
 CALL add_index_if_missing('contract', 'idx_contract_customer_order_no', 'INDEX idx_contract_customer_order_no (customer_order_no)');
 CALL add_index_if_missing('contract', 'uk_contract_factory_order_no', 'UNIQUE INDEX uk_contract_factory_order_no (factory_order_no)');
 CALL add_index_if_missing('customer_order', 'idx_customer_order_customer_id', 'INDEX idx_customer_order_customer_id (customer_id)');
-CALL add_index_if_missing('customer_order', 'idx_customer_order_project_id', 'INDEX idx_customer_order_project_id (project_id)');
 CALL add_index_if_missing('customer_order', 'idx_customer_order_no', 'INDEX idx_customer_order_no (customer_order_no)');
-CALL add_index_if_missing('customer_order', 'uk_customer_order_customer_no', 'UNIQUE INDEX uk_customer_order_customer_no (customer_id, customer_order_no)');
+CALL add_index_if_missing('customer_order', 'uk_customer_order_no', 'UNIQUE INDEX uk_customer_order_no (customer_order_no)');
 
 DROP PROCEDURE IF EXISTS add_index_if_missing;
 
-INSERT INTO customer_order(customer_id, project_id, customer_order_no, customer_order_name, status, is_deleted, created_at, updated_at)
+INSERT INTO customer_order(customer_id, customer_order_no, customer_order_name, status, is_deleted, created_at, updated_at)
 SELECT DISTINCT c.customer_id,
-                c.project_id,
                 c.customer_order_no,
                 c.customer_order_no,
                 '启用',
@@ -967,18 +944,17 @@ SELECT DISTINCT c.customer_id,
                 NOW()
 FROM contract c
 LEFT JOIN customer_order co
-  ON co.project_id = c.project_id
+  ON co.customer_id = c.customer_id
  AND co.customer_order_no = c.customer_order_no
  AND co.is_deleted = 0
 WHERE c.customer_id IS NOT NULL
-  AND c.project_id IS NOT NULL
   AND c.customer_order_no IS NOT NULL
   AND c.customer_order_no <> ''
   AND co.id IS NULL;
 
 UPDATE contract c
 JOIN customer_order co
-  ON co.project_id = c.project_id
+  ON co.customer_id = c.customer_id
  AND co.customer_order_no = c.customer_order_no
  AND co.is_deleted = 0
 SET c.customer_order_id = co.id
@@ -999,8 +975,8 @@ CREATE TABLE IF NOT EXISTS production_line (
 );
 
 INSERT IGNORE INTO production_line(line_code,line_name,enabled,sort_order,created_at,updated_at) VALUES
-('L','L生产线',1,10,NOW(),NOW()),
-('V','V生产线',1,20,NOW(),NOW());
+('L','实木生产线',1,10,NOW(),NOW()),
+('V','板式生产线',1,20,NOW(),NOW());
 
 CREATE TABLE IF NOT EXISTS customer_order_cad_file (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,

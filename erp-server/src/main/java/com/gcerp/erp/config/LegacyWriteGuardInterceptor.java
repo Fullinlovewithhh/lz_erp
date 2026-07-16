@@ -12,7 +12,7 @@ import java.util.List;
 @Component
 public class LegacyWriteGuardInterceptor implements HandlerInterceptor {
     private static final List<String> LEGACY_PREFIXES = List.of(
-            "/api/contracts", "/api/quotes", "/api/quote-details", "/api/payments", "/api/productions"
+            "/api/contracts", "/api/quotes", "/api/quote-details", "/api/payments", "/api/productions", "/api/projects"
     );
 
     @Override

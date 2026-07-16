@@ -132,11 +132,10 @@ public class OrderFlowService {
 
     public List<Map<String, Object>> listReviewPool() {
         return jdbcTemplate.queryForList("""
-                SELECT co.*, c.customer_name, p.project_name,
+                SELECT co.*, c.customer_name,
                        u.display_name AS review_engineer_name
                 FROM customer_order co
                 JOIN customer c ON c.id=co.customer_id
-                LEFT JOIN project p ON p.project_id=co.project_id
                 LEFT JOIN app_user u ON u.id=co.review_engineer_id
                 WHERE co.is_deleted=0 AND co.review_status IN ('待领取','评审中')
                 ORDER BY co.created_at
@@ -196,15 +195,19 @@ public class OrderFlowService {
     }
 
     @Transactional
-    public synchronized List<Map<String, Object>> confirmSplit(Long customerOrderId) {
-        requireRole("SERVICE", "ADMIN");
-        customerOrder(customerOrderId);
+    public synchronized List<Map<String, Object>> submitSplit(Long customerOrderId) {
+        requireRole("ENGINEER", "ADMIN");
+        Map<String, Object> order = customerOrder(customerOrderId);
+        Long reviewer = longValue(order.get("review_engineer_id"));
+        if (!isAdmin() && (reviewer == null || !reviewer.equals(userId()))) {
+            throw new IllegalArgumentException("只有领取该CAD评审的深化设计师可以提交拆单");
+        }
         List<Map<String, Object>> drafts = jdbcTemplate.queryForList("""
                 SELECT d.*,pl.line_code FROM customer_order_split_draft d
                 JOIN production_line pl ON pl.id=d.production_line_id
                 WHERE d.customer_order_id=? AND d.status='草稿' ORDER BY d.sort_order,d.id
                 """, customerOrderId);
-        if (drafts.isEmpty()) throw new IllegalArgumentException("没有可确认的拆单草稿");
+        if (drafts.isEmpty()) throw new IllegalArgumentException("没有可提交的拆单草稿");
         String paymentStatus = String.valueOf(customerOrder(customerOrderId).get("payment_status"));
         boolean hasSupplement = drafts.stream().anyMatch(d -> "SUPPLEMENT".equals(String.valueOf(d.get("order_type"))));
         Integer maxSeq = jdbcTemplate.queryForObject(
@@ -222,10 +225,10 @@ public class OrderFlowService {
                     type, draft.get("parent_factory_order_id"), seq,
                     "SUPPLEMENT".equals(type) && !"财务确认全款".equals(paymentStatus) ? 1 : 0,
                     draft.get("remark"), userId());
-            jdbcTemplate.update("UPDATE customer_order_split_draft SET status='已确认',updated_at=NOW() WHERE id=?", draft.get("id"));
+            jdbcTemplate.update("UPDATE customer_order_split_draft SET status='已提交',updated_at=NOW() WHERE id=?", draft.get("id"));
         }
         jdbcTemplate.update("""
-                UPDATE customer_order SET review_status='拆单已确认',quote_status='待报价',
+                UPDATE customer_order SET review_status='拆单已完成',quote_status='待报价',
                 cutting_release_status=?,updated_at=NOW() WHERE id=?
                 """, hasSupplement ? "补单待确认" : "未申请", customerOrderId);
         return listFactoryOrders(customerOrderId, null);

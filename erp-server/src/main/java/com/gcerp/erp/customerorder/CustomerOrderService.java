@@ -4,8 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.gcerp.erp.auth.AuthContext;
 import com.gcerp.erp.customer.Customer;
 import com.gcerp.erp.customer.CustomerMapper;
-import com.gcerp.erp.project.Project;
-import com.gcerp.erp.project.ProjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,22 +16,18 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CustomerOrderService {
     private final CustomerOrderMapper customerOrderMapper;
-    private final ProjectMapper projectMapper;
     private final CustomerMapper customerMapper;
     private final JdbcTemplate jdbcTemplate;
 
     @Transactional
     public CustomerOrder create(CustomerOrderRequest req) {
-        Project project = requireOptionalProject(req.getProjectId());
-        Long customerId = req.getCustomerId() != null ? req.getCustomerId() : (project == null ? null : project.getCustomerId());
+        Long customerId = req.getCustomerId();
         requireCustomer(customerId);
-        validateProjectCustomer(project, customerId);
         String orderNo = requiredOrderNo(req.getCustomerOrderNo());
-        validateUnique(customerId, orderNo, null);
+        validateUniqueOrderNo(orderNo, null);
 
         CustomerOrder row = new CustomerOrder();
         row.setCustomerId(customerId);
-        row.setProjectId(project == null ? null : project.getProjectId());
         row.setCustomerOrderNo(orderNo);
         row.setCustomerOrderName(normalize(req.getCustomerOrderName()));
         row.setRemark(req.getRemark());
@@ -50,10 +44,9 @@ public class CustomerOrderService {
         return row;
     }
 
-    public List<CustomerOrder> list(Long projectId, Long customerId, String keyword) {
+    public List<CustomerOrder> list(Long customerId, String keyword) {
         LambdaQueryWrapper<CustomerOrder> qw = new LambdaQueryWrapper<CustomerOrder>()
                 .eq(CustomerOrder::getIsDeleted, 0);
-        if (projectId != null) qw.eq(CustomerOrder::getProjectId, projectId);
         if (customerId != null) qw.eq(CustomerOrder::getCustomerId, customerId);
         String kw = normalize(keyword);
         if (kw != null) {
@@ -76,15 +69,12 @@ public class CustomerOrderService {
     @Transactional
     public CustomerOrder update(Long id, CustomerOrderRequest req) {
         CustomerOrder row = getById(id);
-        Project project = requireOptionalProject(req.getProjectId() != null ? req.getProjectId() : row.getProjectId());
         Long customerId = req.getCustomerId() != null ? req.getCustomerId() : row.getCustomerId();
         requireCustomer(customerId);
-        validateProjectCustomer(project, customerId);
         String orderNo = requiredOrderNo(req.getCustomerOrderNo());
-        validateUnique(customerId, orderNo, id);
+        validateUniqueOrderNo(orderNo, id);
 
         row.setCustomerId(customerId);
-        row.setProjectId(project == null ? null : project.getProjectId());
         row.setCustomerOrderNo(orderNo);
         row.setCustomerOrderName(normalize(req.getCustomerOrderName()));
         row.setRemark(req.getRemark());
@@ -107,32 +97,19 @@ public class CustomerOrderService {
         customerOrderMapper.updateById(row);
     }
 
-    private void validateUnique(Long customerId, String orderNo, Long excludedId) {
-        LambdaQueryWrapper<CustomerOrder> query = new LambdaQueryWrapper<CustomerOrder>()
-                .eq(CustomerOrder::getCustomerId, customerId)
-                .eq(CustomerOrder::getCustomerOrderNo, orderNo)
-                .eq(CustomerOrder::getIsDeleted, 0);
-        if (excludedId != null) query.ne(CustomerOrder::getId, excludedId);
-        Long dup = customerOrderMapper.selectCount(query);
-        if (dup != null && dup > 0) throw new IllegalArgumentException("customer order no already exists under this customer");
-    }
-
-    private Project requireOptionalProject(Long projectId) {
-        if (projectId == null) return null;
-        Project project = projectMapper.selectById(projectId);
-        if (project == null || Integer.valueOf(1).equals(project.getIsDeleted())) throw new IllegalArgumentException("project not found");
-        return project;
-    }
-
     private void requireCustomer(Long customerId) {
         if (customerId == null) throw new IllegalArgumentException("customerId is required");
         Customer customer = customerMapper.selectById(customerId);
         if (customer == null) throw new IllegalArgumentException("customer not found");
     }
 
-    private void validateProjectCustomer(Project project, Long customerId) {
-        if (project != null && !customerId.equals(project.getCustomerId())) {
-            throw new IllegalArgumentException("customer order must belong to the selected project");
+    private void validateUniqueOrderNo(String orderNo, Long excludedId) {
+        LambdaQueryWrapper<CustomerOrder> query = new LambdaQueryWrapper<CustomerOrder>()
+                .eq(CustomerOrder::getCustomerOrderNo, orderNo);
+        if (excludedId != null) query.ne(CustomerOrder::getId, excludedId);
+        Long count = customerOrderMapper.selectCount(query);
+        if (count != null && count > 0) {
+            throw new IllegalArgumentException("客户订单号已存在，不允许重复");
         }
     }
 

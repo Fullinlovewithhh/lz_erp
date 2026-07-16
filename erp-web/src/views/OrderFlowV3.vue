@@ -19,7 +19,7 @@
       </table></div>
     </section>
 
-    <section v-if="activeTab === '拆单确认'" class="flow-section">
+    <section v-if="activeTab === '拆单'" class="flow-section">
       <div class="section-head"><h2>拆单草稿</h2><select v-model="selectedCustomerOrderId" @change="loadDrafts"><option value="">选择客户订单</option><option v-for="o in orderRows" :key="o.id" :value="o.id">{{ o.customerOrderNo }}</option></select></div>
       <div class="form-row">
         <label>工厂订单名称<input v-model.trim="draftForm.factoryOrderName" placeholder="住宅1-客厅" /></label>
@@ -30,7 +30,7 @@
         <button class="primary align-end" @click="saveDraft">加入草稿</button>
       </div>
       <div class="table-wrap"><table><thead><tr><th>名称</th><th>生产线</th><th>类型</th><th>原订单</th><th>备注</th><th>状态</th></tr></thead><tbody><tr v-for="d in drafts" :key="d.id"><td>{{ d.factory_order_name }}</td><td>{{ d.line_code }}</td><td>{{ d.order_type === 'SUPPLEMENT' ? '补单' : '正常' }}</td><td>{{ d.parent_factory_order_id || '-' }}</td><td>{{ d.remark || '-' }}</td><td>{{ d.status }}</td></tr></tbody></table></div>
-      <div class="action-bar"><button class="primary" :disabled="!drafts.some(d => d.status === '草稿')" @click="confirmSplit">客服确认并生成工厂订单</button></div>
+      <div class="action-bar"><button class="primary" :disabled="!drafts.some(d => d.status === '草稿')" @click="submitSplit">提交拆单并进入报价池</button></div>
     </section>
 
     <section v-if="activeTab === '工厂订单'" class="flow-section">
@@ -137,7 +137,7 @@ import * as api from '../api/contract'
 
 const props = defineProps({ view: { type: String, default: '客户订单' } })
 const viewTabs = {
-  客户订单: '客户订单', CAD评审池: 'CAD评审', 拆单确认: '拆单确认', 工厂订单: '工厂订单', 补单管理: '工厂订单',
+  客户订单: '客户订单', CAD评审池: 'CAD评审', 拆单: '拆单', 工厂订单: '工厂订单', 补单管理: '工厂订单',
   报价订单池: '工厂订单', 完整报价明细: '工厂订单', 报价版本: '工厂订单', 客户报价汇总: '商务财务', 报价PDF与客户确认: '商务财务',
   付款计划: '商务财务', 到账确认: '商务财务', 价格调整审批: '商务财务', 下料放行: '商务财务', 月结与逾期: '商务财务',
   生产线配置: '配置', 五金资料: '配置', 库存管理: '配置', 收款账户配置: '配置',
@@ -191,7 +191,7 @@ async function refreshAll() {
   await Promise.all([loadCustomers(), loadOrders(), loadLines(), loadFactoryOrders(), loadCommercial(), loadAccounts(), loadHardware(), loadQuoteRules(), loadCompanyProfile(), loadCatalogs()])
 }
 async function loadCustomers() { customers.value = (await api.listCustomers('')).data.data || [] }
-async function loadOrders() { orderRows.value = (await api.listCustomerOrders(null, null, '')).data.data || [] }
+async function loadOrders() { orderRows.value = (await api.listCustomerOrders(null, '')).data.data || [] }
 async function loadReviewPool() { reviewPool.value = (await api.listReviewPoolV3()).data.data || [] }
 async function loadLines() { lines.value = (await api.listProductionLines()).data.data || [] }
 async function loadFactoryOrders() { factoryOrders.value = (await api.listFactoryOrdersV3()).data.data || [] }
@@ -205,13 +205,17 @@ function customerName(id) { return customers.value.find(c => String(c.id) === St
 function money(value) { return Number(value || 0).toFixed(2) }
 function message(error) { window.alert(error?.response?.data?.message || error?.message || '操作失败') }
 
-async function createOrder() { try { await api.createCustomerOrder({ ...orderForm.value, customerId: Number(orderForm.value.customerId), projectId: null, customerOrderName: null }); orderForm.value = { customerId: '', customerOrderNo: '', remark: '' }; await loadOrders() } catch (e) { message(e) } }
+async function createOrder() {
+  const duplicate = orderRows.value.some(o => String(o.customerOrderNo || '').trim().toLowerCase() === orderForm.value.customerOrderNo.trim().toLowerCase())
+  if (duplicate) return window.alert('客户订单号已存在，不允许重复创建')
+  try { await api.createCustomerOrder({ ...orderForm.value, customerId: Number(orderForm.value.customerId), customerOrderName: null }); orderForm.value = { customerId: '', customerOrderNo: '', remark: '' }; await loadOrders() } catch (e) { message(e) }
+}
 async function uploadCad(id, event) { const file = event.target.files?.[0]; if (!file) return; try { await api.uploadCustomerOrderCad(id, file); window.alert('CAD已上传') } catch (e) { message(e) } finally { event.target.value = '' } }
 async function claimReview(id) { try { await api.claimCustomerOrderReview(id); await loadReviewPool(); await loadOrders() } catch (e) { message(e) } }
-async function selectForSplit(order) { selectedCustomerOrderId.value = String(order.id); activeTab.value = '拆单确认'; await loadDrafts() }
+async function selectForSplit(order) { selectedCustomerOrderId.value = String(order.id); activeTab.value = '拆单'; await loadDrafts() }
 async function loadDrafts() { if (!selectedCustomerOrderId.value) { drafts.value = []; return }; drafts.value = (await api.listSplitDrafts(Number(selectedCustomerOrderId.value))).data.data || [] }
 async function saveDraft() { try { await api.addSplitDraft(Number(selectedCustomerOrderId.value), { ...draftForm.value, productionLineId: Number(draftForm.value.productionLineId), parentFactoryOrderId: draftForm.value.parentFactoryOrderId || null }); draftForm.value = { factoryOrderName: '', productionLineId: '', orderType: 'NORMAL', parentFactoryOrderId: '', remark: '' }; await loadDrafts() } catch (e) { message(e) } }
-async function confirmSplit() { try { await api.confirmCustomerOrderSplit(Number(selectedCustomerOrderId.value)); await Promise.all([loadDrafts(), loadFactoryOrders(), loadOrders()]) } catch (e) { message(e) } }
+async function submitSplit() { try { await api.submitCustomerOrderSplit(Number(selectedCustomerOrderId.value)); await Promise.all([loadDrafts(), loadFactoryOrders(), loadOrders()]) } catch (e) { message(e) } }
 async function claimFactory(id) { try { const row=(await api.claimFactoryOrderV3(id)).data.data; await loadFactoryOrders(); await openQuote(row) } catch (e) { message(e) } }
 async function assignFactory(order) { const userId = window.prompt('请输入新的报价负责人用户ID'); if (!userId) return; const reason = window.prompt('填写指定或转交原因') || ''; try { await api.assignFactoryOrderV3(order.factory_order_id, { userId: Number(userId), reason }); await loadFactoryOrders() } catch (e) { message(e) } }
 async function openQuote(order) { quoteFactory.value = order; quoteForm.value = { discountRate: Number(order.discount_rate || 1), quoteDesc: '', items: [blankQuoteItem()] }; const versions = (await api.listFactoryOrderQuotesV3(order.factory_order_id)).data.data || []; if (versions.length) { const full = (await api.getFactoryOrderQuoteV3(versions[0].id)).data.data; quoteForm.value = { discountRate: Number(full.discount_rate || 1), quoteDesc: full.quote_desc || '', items: (full.items || []).map(savedQuoteItem) } } }
