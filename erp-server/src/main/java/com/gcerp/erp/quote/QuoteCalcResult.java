@@ -10,6 +10,8 @@ import java.util.Map;
 @Data
 public class QuoteCalcResult {
     private BigDecimal areaM2;
+    private BigDecimal billingQuantity;
+    private BigDecimal baseAmount;
     private BigDecimal specialAdjustTotal;
     private BigDecimal finalUnitPrice;
     private BigDecimal amount;

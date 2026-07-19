@@ -9,6 +9,7 @@ public class QuoteRuleCreateRequest {
     private Long sourceRuleId;
     private String ruleCategory;
     private String ruleName;
+    private String chargeReason;
     private String adjustMode;
     private BigDecimal adjustValue;
     private String unitDesc;
@@ -17,5 +18,6 @@ public class QuoteRuleCreateRequest {
     private BigDecimal maxCharge;
     private BigDecimal ruleQuantity;
     private Integer enabled;
+    private Boolean discountEligible;
     private String remark;
 }

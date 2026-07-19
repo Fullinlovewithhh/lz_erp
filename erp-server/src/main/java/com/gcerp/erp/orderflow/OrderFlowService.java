@@ -46,9 +46,9 @@ public class OrderFlowService {
         String code = normalizeLineCode(req.lineCode());
         String name = required(req.lineName(), "生产线名称不能为空");
         jdbcTemplate.update("""
-                INSERT INTO production_line(line_code,line_name,enabled,sort_order,created_at,updated_at)
-                VALUES(?,?,?,?,NOW(),NOW())
-                """, code, name, Boolean.FALSE.equals(req.enabled()) ? 0 : 1, nvl(req.sortOrder(), 0));
+                INSERT INTO production_line(line_code,line_name,quote_mode,enabled,sort_order,created_at,updated_at)
+                VALUES(?,?,?,?,?,NOW(),NOW())
+                """, code, name, normalizeQuoteMode(req.quoteMode()), Boolean.FALSE.equals(req.enabled()) ? 0 : 1, nvl(req.sortOrder(), 0));
         return jdbcTemplate.queryForMap("SELECT * FROM production_line WHERE line_code=?", code);
     }
 
@@ -57,9 +57,9 @@ public class OrderFlowService {
         requireAdmin();
         requireExists("production_line", "id", id);
         jdbcTemplate.update("""
-                UPDATE production_line SET line_code=?,line_name=?,enabled=?,sort_order=?,updated_at=NOW() WHERE id=?
+                UPDATE production_line SET line_code=?,line_name=?,quote_mode=?,enabled=?,sort_order=?,updated_at=NOW() WHERE id=?
                 """, normalizeLineCode(req.lineCode()), required(req.lineName(), "生产线名称不能为空"),
-                Boolean.FALSE.equals(req.enabled()) ? 0 : 1, nvl(req.sortOrder(), 0), id);
+                normalizeQuoteMode(req.quoteMode()), Boolean.FALSE.equals(req.enabled()) ? 0 : 1, nvl(req.sortOrder(), 0), id);
         return jdbcTemplate.queryForMap("SELECT * FROM production_line WHERE id=?", id);
     }
 
@@ -203,7 +203,7 @@ public class OrderFlowService {
             throw new IllegalArgumentException("只有领取该CAD评审的深化设计师可以提交拆单");
         }
         List<Map<String, Object>> drafts = jdbcTemplate.queryForList("""
-                SELECT d.*,pl.line_code FROM customer_order_split_draft d
+                SELECT d.*,pl.line_code,pl.quote_mode FROM customer_order_split_draft d
                 JOIN production_line pl ON pl.id=d.production_line_id
                 WHERE d.customer_order_id=? AND d.status='草稿' ORDER BY d.sort_order,d.id
                 """, customerOrderId);
@@ -217,12 +217,17 @@ public class OrderFlowService {
             seq++;
             String type = String.valueOf(draft.get("order_type"));
             String id = generateFactoryOrderId(String.valueOf(draft.get("line_code")), "SUPPLEMENT".equals(type));
+            String initialStatus = switch (String.valueOf(draft.get("quote_mode"))) {
+                case "EXTERNAL" -> "待外部报价登记";
+                case "NONE" -> "无需报价";
+                default -> "待报价分配";
+            };
             jdbcTemplate.update("""
                     INSERT INTO factory_order(factory_order_id,customer_order_id,production_line_id,factory_order_name,
                     order_type,parent_factory_order_id,split_sequence,status,supplement_credit_flag,demand_desc,created_by,created_at,updated_at)
-                    VALUES(?,?,?,?,?,?,?,'待报价分配',?,?,?,NOW(),NOW())
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())
                     """, id, customerOrderId, draft.get("production_line_id"), draft.get("factory_order_name"),
-                    type, draft.get("parent_factory_order_id"), seq,
+                    type, draft.get("parent_factory_order_id"), seq, initialStatus,
                     "SUPPLEMENT".equals(type) && !"财务确认全款".equals(paymentStatus) ? 1 : 0,
                     draft.get("remark"), userId());
             jdbcTemplate.update("UPDATE customer_order_split_draft SET status='已提交',updated_at=NOW() WHERE id=?", draft.get("id"));
@@ -236,7 +241,8 @@ public class OrderFlowService {
 
     public List<Map<String, Object>> listFactoryOrders(Long customerOrderId, String status) {
         return jdbcTemplate.queryForList("""
-                SELECT fo.*,co.customer_order_no,co.customer_order_name,c.customer_name,pl.line_code,pl.line_name,
+                SELECT fo.*,co.customer_order_no,co.customer_order_name,c.customer_name,c.default_discount_rate AS customer_discount_rate,
+                       pl.line_code,pl.line_name,pl.quote_mode,
                        u.display_name AS quote_assignee_name
                 FROM factory_order fo
                 JOIN customer_order co ON co.id=fo.customer_order_id
@@ -251,6 +257,7 @@ public class OrderFlowService {
     @Transactional
     public Map<String, Object> assignQuoteOwner(String factoryOrderId, Long targetUserId, String reason, boolean claim) {
         Map<String, Object> order = factoryOrder(factoryOrderId);
+        requireErpQuoteMode(factoryOrderId);
         Long oldUser = longValue(order.get("quote_assignee_id"));
         Long target = claim ? userId() : targetUserId;
         if (target == null) throw new IllegalArgumentException("报价负责人不能为空");
@@ -280,22 +287,32 @@ public class OrderFlowService {
     @Transactional
     public Map<String, Object> saveQuote(String factoryOrderId, OrderFlowController.QuoteRequest req) {
         Map<String, Object> order = factoryOrder(factoryOrderId);
+        requireErpQuoteMode(factoryOrderId);
         Long assignee = longValue(order.get("quote_assignee_id"));
         if (!isAdmin() && (assignee == null || !assignee.equals(userId()))) throw new IllegalArgumentException("只有当前报价负责人可以保存报价");
         if (req.items() == null || req.items().isEmpty()) throw new IllegalArgumentException("报价明细不能为空");
-        BigDecimal rate = req.discountRate() == null ? BigDecimal.ONE : req.discountRate();
+        BigDecimal standardRate = standardDiscountRate(factoryOrderId);
+        BigDecimal rate = req.discountRate() == null ? standardRate : req.discountRate();
         if (rate.signum() < 0 || rate.compareTo(BigDecimal.ONE) > 0) throw new IllegalArgumentException("折扣率必须在0到1之间");
+        if (rate.compareTo(standardRate) < 0) {
+            Integer approved = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(1) FROM factory_order_discount_request
+                    WHERE factory_order_id=? AND requested_rate=? AND status='已批准'
+                    """, Integer.class, factoryOrderId, rate);
+            if (approved == null || approved == 0) throw new IllegalArgumentException("该临时折扣低于客户标准折扣，请先提交并完成折扣审批");
+        }
         BigDecimal original = BigDecimal.ZERO;
         BigDecimal finalAmount = BigDecimal.ZERO;
         List<QuoteCalcResult> calculations = new java.util.ArrayList<>();
         List<BigDecimal> itemFinalAmounts = new java.util.ArrayList<>();
         for (QuoteCalcRequest item : req.items()) {
+            prepareQuoteItem(item);
             if (item.getQuantity() == null || item.getQuantity() <= 0) throw new IllegalArgumentException("数量必须大于0");
             nonNegative(item.getBaseUnitPrice(), "单价不能小于0");
             boolean hardware = isHardware(item.getProductCategory());
             QuoteCalcResult calc = hardware ? calculateHardware(item) : quoteDetailService.calculate(item);
             calculations.add(calc);
-            BigDecimal baseAmount = item.getBaseUnitPrice().multiply(calc.getAreaM2()).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal baseAmount = calc.getBaseAmount();
             BigDecimal discountedBase = !hardware && !Boolean.FALSE.equals(item.getDiscountEligible())
                     ? baseAmount.multiply(rate).setScale(2, RoundingMode.HALF_UP) : baseAmount;
             BigDecimal discountedExtras = BigDecimal.ZERO;
@@ -358,22 +375,23 @@ public class OrderFlowService {
             jdbcTemplate.update(connection -> {
                 PreparedStatement ps = connection.prepareStatement("""
                         INSERT INTO factory_order_quote_item(quote_id,product_category,product_id,hardware_item_id,product_name,
-                        specification,material_structure,handle_color,width_mm,height_mm,thickness_mm,hinge_hole,process_desc,
-                        attachment_name,attachment_path,quantity,unit,unit_price,area_m2,base_unit_price,special_adjust_total,
+                        specification,material_structure,handle_color,width_mm,height_mm,length_mm,thickness_mm,hinge_hole,process_desc,
+                        attachment_name,attachment_path,quantity,unit,unit_price,area_m2,pricing_mode,billing_quantity,base_unit_price,special_adjust_total,
                         final_unit_price,original_amount,discount_eligible,discount_amount,final_amount,selected_rule_ids,
                         custom_rule_json,production_process,technician,remark,sort_order)
-                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                         """, Statement.RETURN_GENERATED_KEYS);
                 int p = 1;
                 ps.setLong(p++, quoteId); ps.setString(p++, required(item.getProductCategory(), "产品分类不能为空"));
                 ps.setObject(p++, item.getProductId()); ps.setObject(p++, item.getHardwareItemId());
                 ps.setString(p++, required(item.getProductName(), "产品名称不能为空")); ps.setString(p++, trim(item.getSpecification()));
                 ps.setString(p++, trim(item.getMaterialStructure())); ps.setString(p++, trim(item.getHandleColor()));
-                ps.setBigDecimal(p++, item.getWidthMm()); ps.setBigDecimal(p++, item.getHeightMm()); ps.setBigDecimal(p++, item.getThicknessMm());
+                ps.setBigDecimal(p++, item.getWidthMm()); ps.setBigDecimal(p++, item.getHeightMm()); ps.setBigDecimal(p++, item.getLengthMm()); ps.setBigDecimal(p++, item.getThicknessMm());
                 ps.setString(p++, trim(item.getHingeHole())); ps.setString(p++, trim(item.getProcessDesc()));
                 ps.setString(p++, trim(item.getAttachmentName())); ps.setString(p++, trim(item.getAttachmentPath()));
                 ps.setInt(p++, item.getQuantity()); ps.setString(p++, item.getUnit() == null ? "m2" : item.getUnit());
                 ps.setBigDecimal(p++, item.getBaseUnitPrice()); ps.setBigDecimal(p++, calc.getAreaM2());
+                ps.setString(p++, item.getPricingMode()); ps.setBigDecimal(p++, calc.getBillingQuantity());
                 ps.setBigDecimal(p++, item.getBaseUnitPrice()); ps.setBigDecimal(p++, calc.getSpecialAdjustTotal());
                 ps.setBigDecimal(p++, calc.getFinalUnitPrice()); ps.setBigDecimal(p++, calc.getAmount());
                 ps.setInt(p++, !hardware && !Boolean.FALSE.equals(item.getDiscountEligible()) ? 1 : 0);
@@ -387,9 +405,11 @@ public class OrderFlowService {
             for (Map<String, Object> applied : calc.getAppliedRules()) {
                 jdbcTemplate.update("""
                         INSERT INTO factory_order_quote_item_extra_price(quote_item_id,quote_id,source_rule_id,rule_name,
-                        adjust_mode,adjust_value,unit_desc,rule_quantity,final_charge,discount_eligible,created_at)
-                        VALUES(?,?,?,?,?,?,?,?,?,?,NOW())
+                        rule_category,charge_reason,is_custom,adjust_mode,adjust_value,unit_desc,rule_quantity,
+                        final_charge,discount_eligible,created_at)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())
                         """, quoteItemId, quoteId, nullableLong(applied.get("source_rule_id")), applied.get("rule_name"),
+                        applied.get("rule_category"), applied.get("charge_reason"), nullableLong(applied.get("source_rule_id")) == null ? 1 : 0,
                         applied.get("adjust_mode"), applied.get("adjust_value"), applied.get("unit_desc"),
                         applied.get("rule_quantity"), applied.get("final_charge"), isRuleDiscountEligible(item, applied) ? 1 : 0);
             }
@@ -403,10 +423,46 @@ public class OrderFlowService {
             jdbcTemplate.update("UPDATE customer_quote_confirmation SET status='已失效' WHERE customer_order_id=? AND status='有效'", customerOrderId);
             jdbcTemplate.update("UPDATE customer_quote_pdf SET status='已失效',invalidated_at=NOW() WHERE customer_order_id=? AND status<>'已失效'", customerOrderId);
             refreshCustomerOrderQuote(customerOrderId);
+            refreshQuoteCompletion(customerOrderId);
         } else {
             jdbcTemplate.update("UPDATE factory_order SET status='报价中',updated_at=NOW() WHERE factory_order_id=?", factoryOrderId);
         }
         return quoteWithItems(quoteId);
+    }
+
+    @Transactional
+    public Map<String, Object> saveExternalQuote(String factoryOrderId, OrderFlowController.ExternalQuoteRequest req) {
+        requireRole("SERVICE", "ADMIN");
+        requireExternalQuoteMode(factoryOrderId);
+        BigDecimal amount = nonNegative(req.finalAmount(), "外部报价金额不能小于0");
+        if (req.quoteDate() == null) throw new IllegalArgumentException("外部报价日期不能为空");
+        Integer version = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(MAX(version_no),0)+1 FROM factory_order_external_quote WHERE factory_order_id=?",
+                Integer.class, factoryOrderId);
+        jdbcTemplate.update("UPDATE factory_order_external_quote SET status='已失效' WHERE factory_order_id=? AND status='有效'", factoryOrderId);
+        jdbcTemplate.update("""
+                INSERT INTO factory_order_external_quote(factory_order_id,version_no,external_quote_no,final_amount,
+                quote_date,attachment_path,confirmation_status,confirmed_at,recorded_by,recorded_at,status,remark)
+                VALUES(?,?,?,?,?,?,?,?,?,NOW(),'有效',?)
+                """, factoryOrderId, version, trim(req.externalQuoteNo()), amount, req.quoteDate(),
+                trim(req.attachmentPath()), Boolean.TRUE.equals(req.customerConfirmed()) ? "客户已确认" : "待客户确认",
+                Boolean.TRUE.equals(req.customerConfirmed()) ? (req.confirmedAt() == null ? LocalDateTime.now() : req.confirmedAt()) : null,
+                userId(), trim(req.remark()));
+        jdbcTemplate.update("""
+                UPDATE factory_order SET original_quote_amount=?,discount_rate=1,discounted_quote_amount=?,
+                current_quote_version=?,status=?,updated_at=NOW() WHERE factory_order_id=?
+                """, amount, amount, version, Boolean.TRUE.equals(req.customerConfirmed()) ? "外部报价已确认" : "外部报价待确认", factoryOrderId);
+        Long customerOrderId = jdbcTemplate.queryForObject("SELECT customer_order_id FROM factory_order WHERE factory_order_id=?", Long.class, factoryOrderId);
+        jdbcTemplate.update("UPDATE customer_quote_confirmation SET status='已失效' WHERE customer_order_id=? AND status='有效'", customerOrderId);
+        jdbcTemplate.update("UPDATE customer_quote_pdf SET status='已失效',invalidated_at=NOW() WHERE customer_order_id=? AND status<>'已失效'", customerOrderId);
+        refreshCustomerOrderQuote(customerOrderId);
+        refreshQuoteCompletion(customerOrderId);
+        return jdbcTemplate.queryForMap("SELECT * FROM factory_order_external_quote WHERE factory_order_id=? AND version_no=?", factoryOrderId, version);
+    }
+
+    public List<Map<String, Object>> listExternalQuotes(String factoryOrderId) {
+        requireExternalQuoteMode(factoryOrderId);
+        return jdbcTemplate.queryForList("SELECT * FROM factory_order_external_quote WHERE factory_order_id=? ORDER BY version_no DESC", factoryOrderId);
     }
 
     public List<Map<String, Object>> listQuotes(String factoryOrderId) {
@@ -414,6 +470,43 @@ public class OrderFlowService {
                 SELECT q.*,u.display_name AS created_by_name FROM factory_order_quote q
                 LEFT JOIN app_user u ON u.id=q.created_by WHERE q.factory_order_id=? ORDER BY q.version_no DESC
                 """, factoryOrderId);
+    }
+
+    @Transactional
+    public Map<String, Object> requestDiscount(String factoryOrderId, OrderFlowController.DiscountRequest req) {
+        Map<String, Object> order = factoryOrder(factoryOrderId);
+        requireErpQuoteMode(factoryOrderId);
+        Long assignee = longValue(order.get("quote_assignee_id"));
+        if (!isAdmin() && (assignee == null || !assignee.equals(userId()))) {
+            throw new IllegalArgumentException("只有当前报价负责人可以申请临时折扣");
+        }
+        BigDecimal standard = standardDiscountRate(factoryOrderId);
+        BigDecimal requested = req.requestedRate();
+        if (requested == null || requested.signum() < 0 || requested.compareTo(standard) >= 0) {
+            throw new IllegalArgumentException("临时折扣必须低于当前客户标准折扣");
+        }
+        KeyHolder key = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement("""
+                    INSERT INTO factory_order_discount_request(factory_order_id,original_rate,requested_rate,reason,
+                    status,requested_by,requested_at) VALUES(?,?,?,?,'待审批',?,NOW())
+                    """, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, factoryOrderId); ps.setBigDecimal(2, standard); ps.setBigDecimal(3, requested);
+            ps.setString(4, required(req.reason(), "折扣申请原因不能为空")); ps.setLong(5, userId());
+            return ps;
+        }, key);
+        return jdbcTemplate.queryForMap("SELECT * FROM factory_order_discount_request WHERE id=?", key.getKey().longValue());
+    }
+
+    @Transactional
+    public Map<String, Object> approveDiscount(Long requestId, OrderFlowController.ApprovalRequest req) {
+        requireDirector();
+        String status = Boolean.TRUE.equals(req.approved()) ? "已批准" : "已驳回";
+        jdbcTemplate.update("""
+                UPDATE factory_order_discount_request SET status=?,approved_by=?,approved_at=NOW(),approval_remark=?
+                WHERE id=? AND status='待审批'
+                """, status, userId(), trim(req.remark()), requestId);
+        return jdbcTemplate.queryForMap("SELECT * FROM factory_order_discount_request WHERE id=?", requestId);
     }
 
     public Map<String, Object> getQuote(Long quoteId) {
@@ -429,6 +522,7 @@ public class OrderFlowService {
         Integer version = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(MAX(version_no),0)+1 FROM customer_order_price_adjustment WHERE customer_order_id=?
                 """, Integer.class, customerOrderId);
+        jdbcTemplate.update("UPDATE customer_quote_confirmation SET status='已失效' WHERE customer_order_id=? AND status='有效'", customerOrderId);
         KeyHolder key = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement("""
@@ -474,9 +568,23 @@ public class OrderFlowService {
                 SELECT COUNT(1) FROM customer_order_price_adjustment WHERE customer_order_id=? AND status='待厂长审批'
                 """, Integer.class, customerOrderId);
         if (pending != null && pending > 0) throw new IllegalArgumentException("仍有价格调整等待厂长审批");
+        Integer incompleteQuotes = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1) FROM factory_order fo
+                JOIN production_line pl ON pl.id=fo.production_line_id
+                LEFT JOIN factory_order_external_quote eq
+                  ON eq.factory_order_id=fo.factory_order_id AND eq.status='有效'
+                WHERE fo.customer_order_id=? AND (
+                  (pl.quote_mode='ERP' AND fo.current_quote_version=0) OR
+                  (pl.quote_mode='EXTERNAL' AND (eq.id IS NULL OR eq.confirmation_status<>'客户已确认'))
+                )
+                """, Integer.class, customerOrderId);
+        if (incompleteQuotes != null && incompleteQuotes > 0) {
+            throw new IllegalArgumentException("仍有L线报价未提交或V线外部报价未确认");
+        }
         Integer version = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(MAX(confirmation_version),0)+1 FROM customer_quote_confirmation WHERE customer_order_id=?
                 """, Integer.class, customerOrderId);
+        jdbcTemplate.update("UPDATE customer_quote_confirmation SET status='已失效' WHERE customer_order_id=? AND status='有效'", customerOrderId);
         KeyHolder key = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement("""
@@ -590,6 +698,13 @@ public class OrderFlowService {
                 SELECT pa.*,co.customer_order_no,c.customer_name FROM customer_order_price_adjustment pa
                 JOIN customer_order co ON co.id=pa.customer_order_id JOIN customer c ON c.id=co.customer_id
                 WHERE pa.status='待厂长审批' ORDER BY pa.requested_at
+                """));
+        result.put("discountRequests", jdbcTemplate.queryForList("""
+                SELECT dr.*,fo.factory_order_name,co.customer_order_no,c.customer_name
+                FROM factory_order_discount_request dr
+                JOIN factory_order fo ON fo.factory_order_id=dr.factory_order_id
+                JOIN customer_order co ON co.id=fo.customer_order_id JOIN customer c ON c.id=co.customer_id
+                WHERE dr.status='待审批' ORDER BY dr.requested_at
                 """));
         result.put("paymentPlans", jdbcTemplate.queryForList("""
                 SELECT pp.customer_order_id,pp.plan_version,MIN(pp.due_date) first_due_date,SUM(pp.planned_amount) total_amount,
@@ -740,6 +855,21 @@ public class OrderFlowService {
         refreshPaymentStatus(customerOrderId);
     }
 
+    private void refreshQuoteCompletion(Long customerOrderId) {
+        Integer pending = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1) FROM factory_order fo
+                JOIN production_line pl ON pl.id=fo.production_line_id
+                LEFT JOIN factory_order_external_quote eq ON eq.factory_order_id=fo.factory_order_id AND eq.status='有效'
+                WHERE fo.customer_order_id=? AND (
+                  (pl.quote_mode='ERP' AND fo.current_quote_version=0) OR
+                  (pl.quote_mode='EXTERNAL' AND (eq.id IS NULL OR eq.confirmation_status<>'客户已确认'))
+                )
+                """, Integer.class, customerOrderId);
+        if (pending != null && pending == 0) {
+            jdbcTemplate.update("UPDATE customer_order SET quote_status='报价待整单确认',updated_at=NOW() WHERE id=?", customerOrderId);
+        }
+    }
+
     private void refreshPaymentStatus(Long customerOrderId) {
         Map<String, Object> order = customerOrder(customerOrderId);
         BigDecimal received = jdbcTemplate.queryForObject("""
@@ -790,6 +920,22 @@ public class OrderFlowService {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("SELECT * FROM factory_order WHERE factory_order_id=?", id);
         if (rows.isEmpty()) throw new IllegalArgumentException("工厂订单不存在");
         return rows.getFirst();
+    }
+
+    private void requireErpQuoteMode(String factoryOrderId) {
+        String mode = jdbcTemplate.queryForObject("""
+                SELECT pl.quote_mode FROM factory_order fo JOIN production_line pl ON pl.id=fo.production_line_id
+                WHERE fo.factory_order_id=?
+                """, String.class, factoryOrderId);
+        if (!"ERP".equals(mode)) throw new IllegalArgumentException("该生产线使用外部报价，不进入ERP报价池");
+    }
+
+    private void requireExternalQuoteMode(String factoryOrderId) {
+        String mode = jdbcTemplate.queryForObject("""
+                SELECT pl.quote_mode FROM factory_order fo JOIN production_line pl ON pl.id=fo.production_line_id
+                WHERE fo.factory_order_id=?
+                """, String.class, factoryOrderId);
+        if (!"EXTERNAL".equals(mode)) throw new IllegalArgumentException("该生产线不是外部报价模式");
     }
 
     private Map<String, Object> quoteWithItems(long quoteId) {
@@ -851,6 +997,12 @@ public class OrderFlowService {
         return code;
     }
 
+    private String normalizeQuoteMode(String value) {
+        String mode = value == null ? "ERP" : value.trim().toUpperCase(Locale.ROOT);
+        if (!List.of("ERP", "EXTERNAL", "NONE").contains(mode)) throw new IllegalArgumentException("报价模式无效");
+        return mode;
+    }
+
     private String normalizeOrderType(String value) {
         String type = value == null ? "NORMAL" : value.trim().toUpperCase(Locale.ROOT);
         if (!List.of("NORMAL", "SUPPLEMENT").contains(type)) throw new IllegalArgumentException("订单类型无效");
@@ -867,11 +1019,64 @@ public class OrderFlowService {
         BigDecimal amount = item.getBaseUnitPrice().multiply(quantity).setScale(2, RoundingMode.HALF_UP);
         QuoteCalcResult result = new QuoteCalcResult();
         result.setAreaM2(quantity);
+        result.setBillingQuantity(quantity);
+        result.setBaseAmount(amount);
         result.setSpecialAdjustTotal(BigDecimal.ZERO);
         result.setFinalUnitPrice(item.getBaseUnitPrice());
         result.setAmount(amount);
         result.setAppliedRules(List.of());
         return result;
+    }
+
+    private void prepareQuoteItem(QuoteCalcRequest item) {
+        if (item.getHardwareItemId() != null) {
+            Map<String, Object> hardware = jdbcTemplate.queryForMap(
+                    "SELECT * FROM hardware_item WHERE id=? AND enabled=1", item.getHardwareItemId());
+            item.setProductCategory("HARDWARE");
+            item.setProductId(null);
+            item.setProductName(String.valueOf(hardware.get("hardware_name")));
+            item.setBaseUnitPrice(decimal(hardware.get("sale_price")));
+            item.setUnit(String.valueOf(hardware.get("unit")));
+            item.setPricingMode("COUNT");
+            item.setMinBillQuantity(BigDecimal.ZERO);
+            item.setDiscountEligible(false);
+            return;
+        }
+        if (item.getProductId() == null) throw new IllegalArgumentException("报价明细必须选择产品资料中的产品");
+        Map<String, Object> product = jdbcTemplate.queryForMap("SELECT * FROM product WHERE id=?", item.getProductId());
+        item.setHardwareItemId(null);
+        item.setProductCategory(required(String.valueOf(product.get("type")), "产品分类不能为空"));
+        item.setProductName(required(String.valueOf(product.get("product_name")), "产品名称不能为空"));
+        item.setBaseUnitPrice(decimal(product.get("unit_price")));
+        item.setUnit(trim(String.valueOf(product.get("unit_price_unit"))));
+        item.setPricingMode(normalizePricingMode(product.get("pricing_mode")));
+        item.setMinBillQuantity(decimal(product.get("min_bill_quantity")));
+        item.setDiscountEligible(product.get("discount_eligible") == null || Integer.parseInt(String.valueOf(product.get("discount_eligible"))) == 1);
+        if ("AREA".equals(item.getPricingMode()) && (decimal(item.getWidthMm()).signum() <= 0 || decimal(item.getHeightMm()).signum() <= 0)) {
+            throw new IllegalArgumentException("按面积计价的产品必须填写宽度和高度");
+        }
+        if ("LENGTH".equals(item.getPricingMode()) && decimal(item.getLengthMm()).signum() <= 0) {
+            throw new IllegalArgumentException("按长度计价的产品必须填写长度");
+        }
+    }
+
+    private String normalizePricingMode(Object value) {
+        String mode = value == null ? "AREA" : String.valueOf(value).trim().toUpperCase(Locale.ROOT);
+        return "LENGTH".equals(mode) || "COUNT".equals(mode) ? mode : "AREA";
+    }
+
+    private BigDecimal standardDiscountRate(String factoryOrderId) {
+        BigDecimal rate = jdbcTemplate.queryForObject("""
+                SELECT COALESCE((
+                  SELECT p.discount_rate FROM customer_discount_policy p
+                  WHERE p.customer_id=c.id AND p.status='已批准' AND p.effective_from<=CURRENT_DATE
+                    AND (p.effective_to IS NULL OR p.effective_to>=CURRENT_DATE)
+                  ORDER BY p.effective_from DESC,p.id DESC LIMIT 1
+                ),c.default_discount_rate,1.0000)
+                FROM factory_order fo JOIN customer_order co ON co.id=fo.customer_order_id
+                JOIN customer c ON c.id=co.customer_id WHERE fo.factory_order_id=?
+                """, BigDecimal.class, factoryOrderId);
+        return rate == null ? BigDecimal.ONE : rate;
     }
 
     private boolean isRuleDiscountEligible(QuoteCalcRequest item, Map<String, Object> rule) {

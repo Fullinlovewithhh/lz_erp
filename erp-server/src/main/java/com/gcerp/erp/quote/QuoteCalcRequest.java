@@ -16,6 +16,7 @@ public class QuoteCalcRequest {
     private String handleColor;
     private BigDecimal widthMm;
     private BigDecimal heightMm;
+    private BigDecimal lengthMm;
     private BigDecimal thicknessMm;
     private Integer quantity;
     private String hingeHole;
@@ -23,6 +24,8 @@ public class QuoteCalcRequest {
     private String attachmentName;
     private String attachmentPath;
     private String unit;
+    private String pricingMode;
+    private BigDecimal minBillQuantity;
     private BigDecimal baseUnitPrice;
     private List<Long> selectedRuleIds;
     private List<QuoteRuleCreateRequest> customRules;

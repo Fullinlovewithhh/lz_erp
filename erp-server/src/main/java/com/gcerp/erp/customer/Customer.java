@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 @Data
 @TableName("customer")
@@ -18,6 +19,7 @@ public class Customer {
     private String address;
     private String level;
     private String owner;
+    private BigDecimal defaultDiscountRate;
     private String customFields;
     private String customText1;
     private String customText2;

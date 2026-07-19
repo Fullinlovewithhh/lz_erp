@@ -36,13 +36,26 @@ public class QuoteDetailService {
     public QuoteCalcResult calculate(QuoteCalcRequest req) {
         BigDecimal width = nz(req.getWidthMm());
         BigDecimal height = nz(req.getHeightMm());
+        BigDecimal length = nz(req.getLengthMm());
         int qty = req.getQuantity() == null || req.getQuantity() <= 0 ? 1 : req.getQuantity();
         BigDecimal baseUnitPrice = nz(req.getBaseUnitPrice());
+        String pricingMode = normalizePricingMode(req.getPricingMode());
 
         BigDecimal areaM2 = width.multiply(height)
                 .divide(new BigDecimal("1000000"), 4, RoundingMode.HALF_UP)
                 .multiply(new BigDecimal(qty))
                 .setScale(4, RoundingMode.HALF_UP);
+        BigDecimal lengthM = length.divide(new BigDecimal("1000"), 4, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal(qty)).setScale(4, RoundingMode.HALF_UP);
+        BigDecimal actualBillingQuantity = switch (pricingMode) {
+            case "LENGTH" -> lengthM;
+            case "COUNT" -> new BigDecimal(qty);
+            default -> areaM2;
+        };
+        BigDecimal minimum = nz(req.getMinBillQuantity());
+        BigDecimal billingQuantity = minimum.signum() > 0 && actualBillingQuantity.compareTo(minimum) < 0
+                ? minimum : actualBillingQuantity;
+        BigDecimal baseAmount = baseUnitPrice.multiply(billingQuantity).setScale(2, RoundingMode.HALF_UP);
 
         List<Map<String, Object>> rules = loadRules(req.getSelectedRuleIds());
         List<Map<String, Object>> customRules = toCustomRules(req.getCustomRules());
@@ -64,13 +77,17 @@ public class QuoteDetailService {
 
             BigDecimal oneRuleCharge;
             if ("PERCENT".equals(mode)) {
-                oneRuleCharge = baseUnitPrice.multiply(calcArea).multiply(value).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+                oneRuleCharge = baseAmount.multiply(value).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
             } else if ("FIXED_PER_ITEM".equals(mode)) {
                 BigDecimal ruleQty = nz((BigDecimal) rule.get("rule_quantity"));
                 if (ruleQty.compareTo(BigDecimal.ZERO) <= 0) {
                     ruleQty = new BigDecimal(qty);
                 }
                 oneRuleCharge = value.multiply(ruleQty);
+            } else if ("FIXED_PER_METER".equals(mode)) {
+                oneRuleCharge = value.multiply(lengthM);
+            } else if ("FIXED_ONCE".equals(mode)) {
+                oneRuleCharge = value;
             } else {
                 oneRuleCharge = value.multiply(calcArea);
             }
@@ -81,17 +98,27 @@ public class QuoteDetailService {
         }
         adjustTotal = adjustTotal.setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal baseAmount = baseUnitPrice.multiply(areaM2).setScale(2, RoundingMode.HALF_UP);
         BigDecimal amount = baseAmount.add(adjustTotal).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal finalUnitPrice = areaM2.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO : amount.divide(areaM2, 2, RoundingMode.HALF_UP);
+        BigDecimal finalUnitPrice = billingQuantity.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO : amount.divide(billingQuantity, 2, RoundingMode.HALF_UP);
 
         QuoteCalcResult result = new QuoteCalcResult();
         result.setAreaM2(areaM2);
+        result.setBillingQuantity(billingQuantity);
+        result.setBaseAmount(baseAmount);
         result.setSpecialAdjustTotal(adjustTotal);
         result.setFinalUnitPrice(finalUnitPrice);
         result.setAmount(amount);
         result.setAppliedRules(allRules);
         return result;
+    }
+
+    private String normalizePricingMode(String mode) {
+        if (mode == null) return "AREA";
+        String normalized = mode.trim().toUpperCase();
+        return switch (normalized) {
+            case "LENGTH", "COUNT" -> normalized;
+            default -> "AREA";
+        };
     }
 
     @Transactional
@@ -602,7 +629,7 @@ public class QuoteDetailService {
         if (ids == null || ids.isEmpty()) return List.of();
         String placeholders = ids.stream().map(i -> "?").collect(Collectors.joining(","));
         return jdbcTemplate.queryForList(
-                "SELECT id, id AS source_rule_id, rule_code, rule_name, adjust_mode, adjust_value, unit_desc, min_area_m2, min_charge, max_charge, remark FROM quote_special_rule WHERE id IN (" + placeholders + ")",
+                "SELECT id, id AS source_rule_id, rule_code, rule_category, rule_name, adjust_mode, adjust_value, unit_desc, min_area_m2, min_charge, max_charge, remark FROM quote_special_rule WHERE id IN (" + placeholders + ")",
                 ids.toArray()
         );
     }
@@ -618,7 +645,9 @@ public class QuoteDetailService {
             one.put("id", r.getSourceRuleId() == null ? 0L : r.getSourceRuleId());
             one.put("source_rule_id", r.getSourceRuleId());
             one.put("rule_code", "CUSTOM");
+            one.put("rule_category", r.getRuleCategory());
             one.put("rule_name", r.getRuleName());
+            one.put("charge_reason", r.getChargeReason());
             one.put("adjust_mode", mode);
             one.put("adjust_value", value);
             one.put("unit_desc", r.getUnitDesc());
@@ -635,7 +664,8 @@ public class QuoteDetailService {
     private String normalizeMode(String mode) {
         if (mode == null || mode.isBlank()) return "FIXED_PER_M2";
         String m = mode.trim().toUpperCase();
-        if ("PERCENT".equals(m) || "FIXED_PER_ITEM".equals(m) || "FIXED_PER_M2".equals(m)) return m;
+        if ("PERCENT".equals(m) || "FIXED_PER_ITEM".equals(m) || "FIXED_PER_M2".equals(m)
+                || "FIXED_PER_METER".equals(m) || "FIXED_ONCE".equals(m)) return m;
         return "FIXED_PER_M2";
     }
 

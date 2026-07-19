@@ -125,6 +125,12 @@ public class CustomerService {
         customer.setAddress(req.getAddress());
         customer.setLevel(req.getLevel());
         customer.setOwner(req.getOwner());
+        if (req.getDefaultDiscountRate() != null) {
+            if (req.getDefaultDiscountRate().signum() < 0 || req.getDefaultDiscountRate().compareTo(java.math.BigDecimal.ONE) > 0) {
+                throw new IllegalArgumentException("客户标准折扣必须在0到1之间");
+            }
+            customer.setDefaultDiscountRate(req.getDefaultDiscountRate());
+        }
         customer.setCustomFields(req.getCustomFields());
     }
 

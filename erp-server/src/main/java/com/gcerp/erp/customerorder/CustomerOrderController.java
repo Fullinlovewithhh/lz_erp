@@ -21,7 +21,19 @@ public class CustomerOrderController {
 
     @PostMapping
     public ApiResponse<CustomerOrder> create(@Valid @RequestBody CustomerOrderRequest req) {
-        return ApiResponse.ok(customerOrderService.create(req));
+        throw new IllegalArgumentException("新建客户订单必须同时上传CAD，请使用完整创建入口");
+    }
+
+    @PostMapping(value = "/with-files", consumes = "multipart/form-data")
+    public ApiResponse<CustomerOrder> createWithFiles(@RequestParam Long customerId,
+                                                       @RequestParam String customerOrderNo,
+                                                       @RequestParam(required = false) String remark,
+                                                       @RequestParam("files") MultipartFile[] files) throws IOException {
+        CustomerOrderRequest req = new CustomerOrderRequest();
+        req.setCustomerId(customerId);
+        req.setCustomerOrderNo(customerOrderNo);
+        req.setRemark(remark);
+        return ApiResponse.ok(customerOrderCadService.createWithFiles(req, files));
     }
 
     @GetMapping

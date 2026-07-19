@@ -155,8 +155,15 @@ export function deleteProject(id) {
   return http.delete(`/projects/${id}`)
 }
 
-export function createCustomerOrder(payload) {
-  return http.post('/customer-orders', payload)
+export function createCustomerOrderWithFiles(payload, files) {
+  const formData = new FormData()
+  formData.append('customerId', payload.customerId)
+  formData.append('customerOrderNo', payload.customerOrderNo)
+  formData.append('remark', payload.remark || '')
+  Array.from(files || []).forEach(file => formData.append('files', file))
+  return http.post('/customer-orders/with-files', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 }
 
 export function listCustomerOrders(customerId, keyword) {
@@ -342,6 +349,22 @@ export function saveFactoryOrderQuoteV3(id, payload) {
 
 export function listFactoryOrderQuotesV3(id) {
   return http.get(`/order-flow/factory-orders/${id}/quotes`)
+}
+
+export function requestFactoryOrderDiscountV3(id, payload) {
+  return http.post(`/order-flow/factory-orders/${id}/discount-requests`, payload)
+}
+
+export function approveFactoryOrderDiscountV3(id, payload) {
+  return http.post(`/order-flow/discount-requests/${id}/approve`, payload)
+}
+
+export function saveFactoryOrderExternalQuoteV3(id, payload) {
+  return http.post(`/order-flow/factory-orders/${id}/external-quotes`, payload)
+}
+
+export function listFactoryOrderExternalQuotesV3(id) {
+  return http.get(`/order-flow/factory-orders/${id}/external-quotes`)
 }
 
 export function getFactoryOrderQuoteV3(quoteId) {

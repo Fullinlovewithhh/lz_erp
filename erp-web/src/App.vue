@@ -157,11 +157,11 @@
           <button @click="refreshMasterData">查询</button>
         </div>
         <table>
-          <thead><tr><th class="batch-col" v-if="batchMode"><input type="checkbox" :checked="isAllSelected(C.product, productRows)" @change="toggleSelectAll(C.product, productRows, $event)" /></th><th>产品编码</th><th>产品类型</th><th>产品风格</th><th>产品名称</th><th>材质</th><th>颜色</th><th>拉手颜色</th><th>单价</th><th>单价单位</th><th>厚度</th><th>厚度单位</th><th>尺寸</th><th>状态</th><th>照片</th><th>更新时间</th><th>备注</th><th>操作</th></tr></thead>
+          <thead><tr><th class="batch-col" v-if="batchMode"><input type="checkbox" :checked="isAllSelected(C.product, productRows)" @change="toggleSelectAll(C.product, productRows, $event)" /></th><th>产品编码</th><th>产品类型</th><th>产品风格</th><th>产品名称</th><th>材质</th><th>颜色</th><th>拉手颜色</th><th>单价</th><th>计价方式</th><th>最低计价量</th><th>参与折扣</th><th>厚度</th><th>尺寸</th><th>状态</th><th>照片</th><th>更新时间</th><th>备注</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="row in productRows" :key="row.id">
               <td class="batch-col" v-if="batchMode"><input type="checkbox" :checked="isRowSelected(C.product, row.id)" @change="toggleRowSelect(C.product, row.id, $event)" /></td>
-              <td>{{ row.product_code }}</td><td>{{ row.type }}</td><td>{{ row.product_name }}</td><td>{{ row.model }}</td><td>{{ row.material_name }}</td><td>{{ row.color }}</td><td>{{ displayEmpty(row.handle_color) }}</td><td>{{ row.unit_price }}</td><td>{{ row.unit_price_unit || 'm2' }}</td><td>{{ row.thickness }}</td><td>{{ row.thickness_unit || 'mm' }}</td><td>{{ row.size }}</td><td><span class="status-pill" :class="statusClass(row.status)">{{ row.status || '暂存' }}</span></td>
+              <td>{{ row.product_code }}</td><td>{{ row.type }}</td><td>{{ row.product_name }}</td><td>{{ row.model }}</td><td>{{ row.material_name }}</td><td>{{ row.color }}</td><td>{{ displayEmpty(row.handle_color) }}</td><td>{{ row.unit_price }} / {{ row.unit_price_unit || '-' }}</td><td>{{ pricingModeText(row.pricing_mode) }}</td><td>{{ displayEmpty(row.min_bill_quantity) }}</td><td>{{ Number(row.discount_eligible) === 1 ? '是' : '否' }}</td><td>{{ row.thickness }}{{ row.thickness_unit || 'mm' }}</td><td>{{ row.size }}</td><td><span class="status-pill" :class="statusClass(row.status)">{{ row.status || '暂存' }}</span></td>
               <td>
                 <div class="img-cell drop-paste-zone" tabindex="0" @paste="onPasteRowImage('product', row.id, $event)" @dragover.prevent @drop.prevent="onDropRowImage('product', row.id, $event)">
                   <img v-if="row.image_url" :src="toAbsUrl(row.image_url)" alt="产品图" class="thumb previewable" @click="openImagePreview(toAbsUrl(row.image_url))" @error="onImageError" />
@@ -253,8 +253,10 @@
           <div class="field-box"><label>规则名称</label><input v-model="newPriceRule.ruleName" placeholder="如：非标颜色" /></div>
           <div class="field-box"><label>计价模式</label><select v-model="newPriceRule.adjustMode">
             <option value="FIXED_PER_M2">按平米</option>
+            <option value="FIXED_PER_METER">按米</option>
             <option value="PERCENT">按百分比</option>
             <option value="FIXED_PER_ITEM">按件</option>
+            <option value="FIXED_ONCE">单次固定金额</option>
           </select></div>
           <div class="field-box"><label>增减值</label><input v-model.number="newPriceRule.adjustValue" type="number" placeholder="可负值" /></div>
           <div class="field-box"><label>单位说明</label><input v-model="newPriceRule.unitDesc" placeholder="元/平、%、元/块" /></div>
@@ -1112,6 +1114,9 @@
           <input v-model="addProduct.handle_color" placeholder="拉手颜色" />
           <input v-model="addProduct.unit_price" placeholder="单价" />
           <input v-model="addProduct.unit_price_unit" placeholder="单价单位（如：元/m²）" />
+          <select v-model="addProduct.pricing_mode"><option value="AREA">按面积</option><option value="LENGTH">按长度</option><option value="COUNT">按数量</option></select>
+          <input v-model="addProduct.min_bill_quantity" placeholder="最低计价量（可不填）" />
+          <select v-model.number="addProduct.discount_eligible"><option :value="1">参与折扣</option><option :value="0">不参与折扣</option></select>
           <input v-model="addProduct.thickness" placeholder="厚度" />
           <input v-model="addProduct.thickness_unit" placeholder="厚度单位（如：mm）" />
           <input v-model="addProduct.size" placeholder="尺寸（如：1200mm*2700mm）" />
@@ -1235,8 +1240,10 @@
           <div class="field-box"><label>规则名称</label><input v-model="ruleEditForm.ruleName" /></div>
           <div class="field-box"><label>计价模式</label><select v-model="ruleEditForm.adjustMode">
             <option value="FIXED_PER_M2">按平米</option>
+            <option value="FIXED_PER_METER">按米</option>
             <option value="PERCENT">按百分比</option>
             <option value="FIXED_PER_ITEM">按件</option>
+            <option value="FIXED_ONCE">单次固定金额</option>
           </select></div>
           <div class="field-box"><label>增减值</label><input v-model.number="ruleEditForm.adjustValue" type="number" /></div>
           <div class="field-box"><label>单位说明</label><input v-model="ruleEditForm.unitDesc" /></div>
@@ -1588,7 +1595,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { batchImport, calculateQuoteDetail, checkPayment, clearAuthToken, createAuthUser, createContract, createCustomerOrder, createProject, createQuoteAssignment, createQuoteRule, deleteContract, deleteFinanceVoucher, deleteMaster, deleteQuoteOrder, deleteQuoteRule, getMasterDetail, getProject, getQuoteOrder, listAuthUsers, listContractCad, listContractLogs, listContracts, listCustomerOrders, listCustomers, listFinanceVouchers, listMaterials, listProducts, listProjects, listQuoteAssignments, listQuoteDetails, listQuoteLogs, listQuoteOrders, listQuoteRules, listStaff, login, logout as apiLogout, resetAuthUserPassword, saveQuoteDetails, setAuthToken, updateAuthUser, updateContract, updateContractStatus, updateMaster, updateQuoteAssignment, updateQuoteOrder, updateQuoteRule, uploadContractCad, uploadFinanceVoucher, uploadMaterialImage, uploadMasterImageTemp, uploadProductImage } from './api/contract'
+import { batchImport, calculateQuoteDetail, checkPayment, clearAuthToken, createAuthUser, createContract, createProject, createQuoteAssignment, createQuoteRule, deleteContract, deleteFinanceVoucher, deleteMaster, deleteQuoteOrder, deleteQuoteRule, getMasterDetail, getProject, getQuoteOrder, listAuthUsers, listContractCad, listContractLogs, listContracts, listCustomerOrders, listCustomers, listFinanceVouchers, listMaterials, listProducts, listProjects, listQuoteAssignments, listQuoteDetails, listQuoteLogs, listQuoteOrders, listQuoteRules, listStaff, login, logout as apiLogout, resetAuthUserPassword, saveQuoteDetails, setAuthToken, updateAuthUser, updateContract, updateContractStatus, updateMaster, updateQuoteAssignment, updateQuoteOrder, updateQuoteRule, uploadContractCad, uploadFinanceVoucher, uploadMaterialImage, uploadMasterImageTemp, uploadProductImage } from './api/contract'
 import brandLogo from './assets/lonzvine-logo.png'
 import loginBg from './assets/login-factory.jpg'
 import CustomerProjectProfile from './views/CustomerProjectProfile.vue'
@@ -1691,7 +1698,7 @@ const dragState = ref({ product: false, material: false })
 const addPreview = ref({ product: '', material: '' })
 const addStaff = ref({ staff_code: '', staff_name: '', role_type: '', process_name: '', phone: '', status: '暂存' })
 const addUser = ref({ username: '', displayName: '', roleCode: '', password: '123456', enabled: 1 })
-const addProduct = ref({ product_code: '', type: '', product_name: '', model: '', material_name: '', color: '', handle_color: '', unit_price: '', unit_price_unit: 'm2', thickness: '', thickness_unit: 'mm', size: '', image_url: '', unit: '平方米', status: '暂存' })
+const addProduct = ref({ product_code: '', type: '', product_name: '', model: '', material_name: '', color: '', handle_color: '', unit_price: '', unit_price_unit: '元/平方米', pricing_mode: 'AREA', dimension_mode: 'WIDTH_HEIGHT', min_bill_quantity: '', discount_eligible: 1, thickness: '', thickness_unit: 'mm', size: '', image_url: '', unit: '平方米', status: '暂存' })
 const addMaterial = ref({ material_code: '', material_name: '', material_type: '', color: '', length_mm: '', width_mm: '', thickness_mm: '', image_url: '', unit: '张', status: '暂存' })
 
 const detailVisible = ref(false)
@@ -1758,8 +1765,6 @@ const customerOptions = ref([])
 const customerDropdownOpen = ref(false)
 const customerProjects = ref([])
 const customerOrderOptions = ref([])
-const orderInlineCustomerOrderVisible = ref(false)
-const orderInlineCustomerOrderForm = ref({ customerOrderNo: '', customerOrderName: '', remark: '' })
 const projectDialogVisible = ref(false)
 const projectDialogSource = ref('')
 const projectCustomerKeyword = ref('')
@@ -2618,6 +2623,7 @@ async function submitAdd() {
       return window.alert(`产品编码重复：${row.product_code}`)
     }
     row.unit_price = row.unit_price === '' ? null : Number(row.unit_price)
+    row.min_bill_quantity = row.min_bill_quantity === '' ? null : Number(row.min_bill_quantity)
   } else if (addModule.value === C.materialData) {
     moduleName = C.materialData
     row = { ...addMaterial.value }
@@ -2808,7 +2814,7 @@ function resetAddForms() {
   addPreview.value = { product: '', material: '' }
   addStaff.value = { staff_code: '', staff_name: '', role_type: '', process_name: '', phone: '', status: '暂存' }
   addUser.value = { username: '', displayName: '', roleCode: '', password: '123456', enabled: 1 }
-  addProduct.value = { product_code: '', type: '', product_name: '', model: '', material_name: '', color: '', handle_color: '', unit_price: '', unit_price_unit: 'm2', thickness: '', thickness_unit: 'mm', size: '', image_url: '', unit: '平方米', status: '暂存' }
+  addProduct.value = { product_code: '', type: '', product_name: '', model: '', material_name: '', color: '', handle_color: '', unit_price: '', unit_price_unit: '元/平方米', pricing_mode: 'AREA', dimension_mode: 'WIDTH_HEIGHT', min_bill_quantity: '', discount_eligible: 1, thickness: '', thickness_unit: 'mm', size: '', image_url: '', unit: '平方米', status: '暂存' }
   addMaterial.value = { material_code: '', material_name: '', material_type: '', color: '', length_mm: '', width_mm: '', thickness_mm: '', image_url: '', unit: '张', status: '暂存' }
 }
 
@@ -2867,7 +2873,7 @@ function fieldLabel(key) {
     username: '账号', display_name: '姓名', role_code: '角色', enabled: '状态',
     staff_code: '人员编码', staff_name: '姓名', role_type: '角色', process_name: '工序', phone: '电话',
     product_code: '产品编码', type: '产品类型', product_name: '产品风格', model: '产品名称', material_name: '材质', color: '颜色', handle_color: '拉手颜色',
-    unit_price: '单价', unit_price_unit: '单价单位', thickness: '厚度', thickness_unit: '厚度单位', size: '尺寸', image_url: '图片地址', unit: '单位', status: '状态',
+    unit_price: '单价', unit_price_unit: '单价单位', pricing_mode: '计价方式', dimension_mode: '尺寸方式', min_bill_quantity: '最低计价量', discount_eligible: '参与折扣', thickness: '厚度', thickness_unit: '厚度单位', size: '尺寸', image_url: '图片地址', unit: '单位', status: '状态',
     material_code: '材料编码', material_type: '材质类型', length_mm: '长(mm)', width_mm: '宽(mm)', thickness_mm: '厚(mm)',
     custom_fields: '备注', custom_text1: '自定义1', custom_text2: '自定义2', custom_text3: '自定义3'
   }
@@ -2885,6 +2891,10 @@ function displayEmpty(value) {
   const text = String(value ?? '').trim()
   if (!text || text.toUpperCase() === 'NULL') return '-'
   return text
+}
+
+function pricingModeText(mode) {
+  return ({ AREA: '按面积', LENGTH: '按长度', COUNT: '按数量' })[String(mode || 'AREA').toUpperCase()] || '按面积'
 }
 
 function ruleStatusText(enabled) {
@@ -3220,6 +3230,8 @@ function requestRemoveExtraItem(row, item) {
 function ruleModeText(mode) {
   if (mode === 'PERCENT') return '%'
   if (mode === 'FIXED_PER_ITEM') return '元/件'
+  if (mode === 'FIXED_PER_METER') return '元/米'
+  if (mode === 'FIXED_ONCE') return '元/次'
   return '元/平'
 }
 
@@ -3336,8 +3348,6 @@ function resetOrderFormForChild() {
   customerOrderOptions.value = []
   orderInlineProjectVisible.value = false
   orderInlineProjectForm.value = { projectName: '', projectAddress: '', projectManager: '', remark: '' }
-  orderInlineCustomerOrderVisible.value = false
-  orderInlineCustomerOrderForm.value = { customerOrderNo: '', customerOrderName: '', remark: '' }
   assignmentForm.value = { serviceStaff: loginUserName.value || '', engineer: '', remark: '' }
   selectedEngineer.value = ''
   orderAssignmentMode.value = 'ASSIGNED'
@@ -3417,8 +3427,6 @@ async function selectOrderCustomer(customer) {
   orderForm.value.customerOrderId = ''
   orderForm.value.customerOrderNo = ''
   customerOrderOptions.value = []
-  orderInlineCustomerOrderVisible.value = false
-  orderInlineCustomerOrderForm.value = { customerOrderNo: '', customerOrderName: '', remark: '' }
   orderInlineProjectVisible.value = false
   orderInlineProjectForm.value = { projectName: '', projectAddress: '', projectManager: '', remark: '' }
   customerDropdownOpen.value = false
@@ -3455,8 +3463,6 @@ async function onOrderProjectChange() {
   orderForm.value.customerOrderId = ''
   orderForm.value.customerOrderNo = ''
   customerOrderOptions.value = []
-  orderInlineCustomerOrderVisible.value = false
-  orderInlineCustomerOrderForm.value = { customerOrderNo: '', customerOrderName: '', remark: '' }
   if (orderForm.value.projectId === NO_SPECIFIC_PROJECT) {
     orderInlineProjectVisible.value = false
     orderInlineProjectForm.value = { projectName: '', projectAddress: '', projectManager: '', remark: '' }
@@ -3480,38 +3486,6 @@ function onOrderCustomerOrderNoInput() {
   const row = customerOrderOptions.value.find((o) => String(o.customerOrderNo || '').trim() === no)
   orderForm.value.customerOrderId = row?.id ? String(row.id) : ''
   autofillOrderBusinessInfo()
-}
-
-function showInlineCustomerOrderCreate() {
-  if (!selectedOrderProject.value) return window.alert('请先选择项目')
-  orderInlineCustomerOrderVisible.value = true
-}
-
-function hideInlineCustomerOrderCreate() {
-  orderInlineCustomerOrderVisible.value = false
-}
-
-async function saveInlineCustomerOrder() {
-  const project = selectedOrderProject.value
-  if (!project) return window.alert('请先选择项目')
-  const customerOrderNo = String(orderInlineCustomerOrderForm.value.customerOrderNo || '').trim()
-  if (!customerOrderNo) return window.alert('请填写客户订单号')
-  const { data } = await createCustomerOrder({
-    customerId: Number(orderForm.value.customerId),
-    projectId: Number(project.projectId),
-    customerOrderNo,
-    customerOrderName: orderInlineCustomerOrderForm.value.customerOrderName,
-    remark: orderInlineCustomerOrderForm.value.remark
-  })
-  if (data?.code !== 0) return window.alert(data?.message || '创建客户订单号失败')
-  const row = data.data
-  await loadOrderCustomerOrders(project.projectId)
-  orderForm.value.customerOrderId = String(row.id)
-  orderForm.value.customerOrderNo = row.customerOrderNo || customerOrderNo
-  orderInlineCustomerOrderVisible.value = false
-  orderInlineCustomerOrderForm.value = { customerOrderNo: '', customerOrderName: '', remark: '' }
-  autofillOrderBusinessInfo()
-  window.alert(`客户订单号创建成功：${row.customerOrderNo || customerOrderNo}`)
 }
 
 function showInlineProjectCreate() {
@@ -5422,7 +5396,7 @@ function onCadWheel(evt) {
 function getCsvTemplate(moduleName) {
   const templates = {
     [C.staff]: 'staff_code,staff_name,role_type,process_name,phone,status,custom_fields\nYG001,张客服,客服,,13800000000,在职,{}',
-    [C.product]: 'product_code,type,product_name,model,material_name,color,handle_color,unit_price,unit_price_unit,thickness,thickness_unit,size,image_url,status,custom_fields\nGMQS34XX26-GD,轻奢柜门,A轻奢柜门-34,23026,中纤,铣型拉手,本体固定,800,m2,26,mm,1200mm*2700mm,/api/master/files/product/demo.png,启用,{}',
+    [C.product]: 'product_code,type,product_name,model,material_name,color,handle_color,unit_price,unit_price_unit,pricing_mode,min_bill_quantity,discount_eligible,thickness,thickness_unit,size,image_url,status,custom_fields\nGMQS34XX26-GD,实木门板,A轻奢柜门-34,23026,中纤,白色,本体固定,800,元/平方米,AREA,0.3,1,26,mm,1200mm*2700mm,/api/master/files/product/demo.png,启用,{}',
     [C.materialData]: 'material_code,material_name,material_type,color,length_mm,width_mm,thickness_mm,image_url,unit,status,custom_fields\nCL001,芦花板,板材,浅胡桃,2440,1220,18,/api/master/files/demo_material.jpg,张,启用,{}',
   }
   return templates[moduleName] || ''

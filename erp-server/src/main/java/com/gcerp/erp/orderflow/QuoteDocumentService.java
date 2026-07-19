@@ -69,9 +69,16 @@ public class QuoteDocumentService {
         List<Map<String, Object>> factories = currentFactoryQuotes(customerOrderId);
         if (factories.isEmpty()) throw new IllegalArgumentException("客户订单没有已提交的工厂订单报价");
         Integer incomplete = jdbcTemplate.queryForObject("""
-                SELECT COUNT(1) FROM factory_order WHERE customer_order_id=? AND current_quote_version=0
+                SELECT COUNT(1) FROM factory_order fo
+                JOIN production_line pl ON pl.id=fo.production_line_id
+                LEFT JOIN factory_order_external_quote eq
+                  ON eq.factory_order_id=fo.factory_order_id AND eq.status='有效'
+                WHERE fo.customer_order_id=? AND (
+                  (pl.quote_mode='ERP' AND fo.current_quote_version=0) OR
+                  (pl.quote_mode='EXTERNAL' AND (eq.id IS NULL OR eq.confirmation_status<>'客户已确认'))
+                )
                 """, Integer.class, customerOrderId);
-        if (incomplete != null && incomplete > 0) throw new IllegalArgumentException("仍有工厂订单未完成报价");
+        if (incomplete != null && incomplete > 0) throw new IllegalArgumentException("仍有L线报价未提交或V线外部报价未确认");
         Integer pendingAdjustment = jdbcTemplate.queryForObject("""
                 SELECT COUNT(1) FROM customer_order_price_adjustment WHERE customer_order_id=? AND status='待厂长审批'
                 """, Integer.class, customerOrderId);
@@ -93,14 +100,15 @@ public class QuoteDocumentService {
         Path target = dir.resolve("quote-v" + version + ".pdf");
         writePdf(target, order, factories, customerOrderId, amounts, rate, validDays, trim(req.quoteRemark()));
 
+        jdbcTemplate.update("UPDATE customer_quote_confirmation SET status='已失效' WHERE customer_order_id=? AND status='有效'", customerOrderId);
         jdbcTemplate.update("UPDATE customer_quote_pdf SET status='已失效',invalidated_at=NOW() WHERE customer_order_id=? AND status<>'已失效'", customerOrderId);
         jdbcTemplate.update("""
                 INSERT INTO customer_quote_pdf(customer_order_id,pdf_version,status,tax_rate,valid_days,
-                product_craft_original,product_craft_discount,non_discount_craft,hardware_amount,price_adjustment,
+                product_craft_original,product_craft_discount,non_discount_craft,hardware_amount,external_quote_amount,price_adjustment,
                 untaxed_total,tax_amount,tax_included_total,quote_remark,file_path,generated_by,generated_at)
-                VALUES(?,?,'待客户确认',?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())
+                VALUES(?,?,'待客户确认',?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())
                 """, customerOrderId, version, rate, validDays, amounts.get("productOriginal"), amounts.get("productDiscount"),
-                amounts.get("nonDiscountCraft"), amounts.get("hardware"), amounts.get("adjustment"), amounts.get("untaxed"),
+                amounts.get("nonDiscountCraft"), amounts.get("hardware"), amounts.get("external"), amounts.get("adjustment"), amounts.get("untaxed"),
                 amounts.get("tax"), amounts.get("taxIncluded"), trim(req.quoteRemark()), target.toString().replace("\\", "/"), userId());
         jdbcTemplate.update("""
                 UPDATE customer_order SET tax_rate=?,quote_valid_days=?,final_receivable_amount=?,updated_at=NOW() WHERE id=?
@@ -133,6 +141,7 @@ public class QuoteDocumentService {
                 SELECT fo.factory_order_id,fo.factory_order_name,fo.discount_rate,fo.original_quote_amount,
                        fo.discounted_quote_amount,q.id AS quote_id,q.version_no,u.display_name AS quote_assignee_name
                 FROM factory_order fo
+                JOIN production_line pl ON pl.id=fo.production_line_id AND pl.quote_mode='ERP'
                 JOIN factory_order_quote q ON q.factory_order_id=fo.factory_order_id AND q.version_no=fo.current_quote_version
                 LEFT JOIN app_user u ON u.id=fo.quote_assignee_id
                 WHERE fo.customer_order_id=? ORDER BY fo.split_sequence
@@ -162,14 +171,21 @@ public class QuoteDocumentService {
                 WHERE fo.customer_order_id=? AND q.version_no=fo.current_quote_version
                   AND i.product_category<>'HARDWARE' AND e.discount_eligible=0
                 """, customerOrderId);
+        BigDecimal external = scalar("""
+                SELECT COALESCE(SUM(eq.final_amount),0) FROM factory_order_external_quote eq
+                JOIN factory_order fo ON fo.factory_order_id=eq.factory_order_id
+                JOIN production_line pl ON pl.id=fo.production_line_id AND pl.quote_mode='EXTERNAL'
+                WHERE fo.customer_order_id=? AND eq.status='有效' AND eq.version_no=fo.current_quote_version
+                """, customerOrderId);
         BigDecimal adjustment = decimal(order.get("price_adjustment_amount"));
-        BigDecimal untaxed = productFinal.add(hardware).add(adjustment).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal untaxed = productFinal.add(hardware).add(external).add(adjustment).setScale(2, RoundingMode.HALF_UP);
         BigDecimal tax = untaxed.multiply(taxRate).setScale(2, RoundingMode.HALF_UP);
         return Map.of(
                 "productOriginal", productOriginal,
                 "productDiscount", productOriginal.subtract(productFinal),
                 "nonDiscountCraft", nonDiscountCraft,
                 "hardware", hardware,
+                "external", external,
                 "adjustment", adjustment,
                 "untaxed", untaxed,
                 "tax", tax,
@@ -241,6 +257,7 @@ public class QuoteDocumentService {
         addSummary(summary, "产品及工艺折后金额", amounts.get("productOriginal").subtract(amounts.get("productDiscount")), head, normal);
         addSummary(summary, "其中不参与折扣的特殊工艺", amounts.get("nonDiscountCraft"), head, normal);
         addSummary(summary, "五金配件（不参与折扣）", amounts.get("hardware"), head, normal);
+        addSummary(summary, "板式外部报价汇总", amounts.get("external"), head, normal);
         addSummary(summary, "成交价调整", amounts.get("adjustment"), head, normal);
         addSummary(summary, "未税报价合计", amounts.get("untaxed"), head, normal);
         addSummary(summary, "税额（" + percent(taxRate) + "）", amounts.get("tax"), head, normal);

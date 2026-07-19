@@ -96,7 +96,8 @@ public class QuoteRuleService {
     private String normalizeMode(String mode) {
         if (mode == null || mode.isBlank()) return "FIXED_PER_M2";
         String m = mode.trim().toUpperCase();
-        if ("PERCENT".equals(m) || "FIXED_PER_ITEM".equals(m) || "FIXED_PER_M2".equals(m)) return m;
+        if ("PERCENT".equals(m) || "FIXED_PER_ITEM".equals(m) || "FIXED_PER_M2".equals(m)
+                || "FIXED_PER_METER".equals(m) || "FIXED_ONCE".equals(m)) return m;
         return "FIXED_PER_M2";
     }
 

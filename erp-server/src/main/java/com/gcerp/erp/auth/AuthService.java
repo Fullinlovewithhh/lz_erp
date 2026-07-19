@@ -138,6 +138,9 @@ public class AuthService {
         if ("ADMIN".equalsIgnoreCase(user.getRoleCode())) return true;
         String p = path == null ? "" : path;
         if (p.startsWith("/api/auth/me") || p.startsWith("/api/auth/logout")) return true;
+        if (p.startsWith("/api/order-flow")) {
+            return List.of("SERVICE", "ENGINEER", "FINANCE", "DIRECTOR").contains(user.getRoleCode());
+        }
         if ("GET".equalsIgnoreCase(method) && p.startsWith("/api/contracts/") && p.endsWith("/logs")) return true;
         return switch (user.getRoleCode()) {
             case "SERVICE" -> startsWithAny(p, "/api/contracts", "/api/customers", "/api/customer-orders", "/api/quote-details/assignments", "/api/quotes", "/api/master/staff");

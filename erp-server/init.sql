@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS customer (
   address VARCHAR(255) NULL,
   level VARCHAR(50) NULL,
   owner VARCHAR(100) NULL,
+  default_discount_rate DECIMAL(6,4) NOT NULL DEFAULT 1.0000,
   custom_fields JSON NULL,
   custom_text1 VARCHAR(255) NULL,
   custom_text2 VARCHAR(255) NULL,
@@ -184,6 +185,10 @@ CREATE TABLE IF NOT EXISTS product (
   handle_color VARCHAR(100) NULL,
   unit_price DECIMAL(12,2) NULL,
   unit_price_unit VARCHAR(30) NULL,
+  pricing_mode VARCHAR(20) NOT NULL DEFAULT 'AREA' COMMENT 'AREA/LENGTH/COUNT',
+  dimension_mode VARCHAR(30) NOT NULL DEFAULT 'WIDTH_HEIGHT',
+  min_bill_quantity DECIMAL(12,4) NULL,
+  discount_eligible TINYINT NOT NULL DEFAULT 1,
   thickness VARCHAR(50) NULL,
   thickness_unit VARCHAR(30) NULL,
   size VARCHAR(100) NULL,
@@ -967,6 +972,7 @@ CREATE TABLE IF NOT EXISTS production_line (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   line_code VARCHAR(10) NOT NULL,
   line_name VARCHAR(100) NOT NULL,
+  quote_mode VARCHAR(20) NOT NULL DEFAULT 'ERP' COMMENT 'ERP/EXTERNAL/NONE',
   enabled TINYINT NOT NULL DEFAULT 1,
   sort_order INT NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL,
@@ -974,9 +980,9 @@ CREATE TABLE IF NOT EXISTS production_line (
   UNIQUE KEY uk_production_line_code (line_code)
 );
 
-INSERT IGNORE INTO production_line(line_code,line_name,enabled,sort_order,created_at,updated_at) VALUES
-('L','实木生产线',1,10,NOW(),NOW()),
-('V','板式生产线',1,20,NOW(),NOW());
+INSERT IGNORE INTO production_line(line_code,line_name,quote_mode,enabled,sort_order,created_at,updated_at) VALUES
+('L','实木生产线','ERP',1,10,NOW(),NOW()),
+('V','板式生产线','EXTERNAL',1,20,NOW(),NOW());
 
 CREATE TABLE IF NOT EXISTS customer_order_cad_file (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -985,6 +991,9 @@ CREATE TABLE IF NOT EXISTS customer_order_cad_file (
   file_ext VARCHAR(20) NULL,
   file_size BIGINT NULL,
   file_path VARCHAR(500) NOT NULL,
+  version_no INT NOT NULL DEFAULT 1,
+  is_current TINYINT NOT NULL DEFAULT 1,
+  version_remark VARCHAR(500) NULL,
   created_by BIGINT NULL,
   created_at DATETIME NOT NULL,
   KEY idx_customer_order_cad_order (customer_order_id),
@@ -1051,6 +1060,38 @@ CREATE TABLE IF NOT EXISTS factory_order_assignment_log (
   CONSTRAINT fk_assignment_log_order FOREIGN KEY (factory_order_id) REFERENCES factory_order(factory_order_id)
 );
 
+CREATE TABLE IF NOT EXISTS customer_discount_policy (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  customer_id BIGINT NOT NULL,
+  discount_rate DECIMAL(6,4) NOT NULL DEFAULT 1.0000,
+  effective_from DATE NOT NULL,
+  effective_to DATE NULL,
+  status VARCHAR(30) NOT NULL DEFAULT '已批准',
+  approved_by BIGINT NULL,
+  approved_at DATETIME NULL,
+  remark VARCHAR(500) NULL,
+  created_by BIGINT NOT NULL,
+  created_at DATETIME NOT NULL,
+  KEY idx_discount_policy_customer (customer_id,effective_from),
+  CONSTRAINT fk_discount_policy_customer FOREIGN KEY (customer_id) REFERENCES customer(id)
+);
+
+CREATE TABLE IF NOT EXISTS factory_order_discount_request (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  factory_order_id VARCHAR(50) NOT NULL,
+  original_rate DECIMAL(6,4) NOT NULL,
+  requested_rate DECIMAL(6,4) NOT NULL,
+  reason VARCHAR(500) NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT '待审批',
+  requested_by BIGINT NOT NULL,
+  requested_at DATETIME NOT NULL,
+  approved_by BIGINT NULL,
+  approved_at DATETIME NULL,
+  approval_remark VARCHAR(500) NULL,
+  KEY idx_discount_request_order (factory_order_id,status),
+  CONSTRAINT fk_discount_request_order FOREIGN KEY (factory_order_id) REFERENCES factory_order(factory_order_id)
+);
+
 CREATE TABLE IF NOT EXISTS factory_order_quote (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   factory_order_id VARCHAR(50) NOT NULL,
@@ -1069,6 +1110,25 @@ CREATE TABLE IF NOT EXISTS factory_order_quote (
   CONSTRAINT fk_factory_quote_order FOREIGN KEY (factory_order_id) REFERENCES factory_order(factory_order_id)
 );
 
+CREATE TABLE IF NOT EXISTS factory_order_external_quote (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  factory_order_id VARCHAR(50) NOT NULL,
+  version_no INT NOT NULL,
+  external_quote_no VARCHAR(100) NULL,
+  final_amount DECIMAL(14,2) NOT NULL,
+  quote_date DATE NOT NULL,
+  attachment_path VARCHAR(500) NULL,
+  confirmation_status VARCHAR(30) NOT NULL DEFAULT '待客户确认',
+  confirmed_at DATETIME NULL,
+  recorded_by BIGINT NOT NULL,
+  recorded_at DATETIME NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT '有效',
+  remark VARCHAR(500) NULL,
+  UNIQUE KEY uk_external_quote_version (factory_order_id, version_no),
+  KEY idx_external_quote_order (factory_order_id),
+  CONSTRAINT fk_external_quote_order FOREIGN KEY (factory_order_id) REFERENCES factory_order(factory_order_id)
+);
+
 CREATE TABLE IF NOT EXISTS factory_order_quote_item (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   quote_id BIGINT NOT NULL,
@@ -1081,12 +1141,15 @@ CREATE TABLE IF NOT EXISTS factory_order_quote_item (
   handle_color VARCHAR(100) NULL,
   width_mm DECIMAL(12,2) NULL,
   height_mm DECIMAL(12,2) NULL,
+  length_mm DECIMAL(12,2) NULL,
   thickness_mm DECIMAL(12,2) NULL,
   hinge_hole VARCHAR(100) NULL,
   process_desc VARCHAR(500) NULL,
   attachment_name VARCHAR(200) NULL,
   attachment_path VARCHAR(500) NULL,
   area_m2 DECIMAL(12,4) NOT NULL DEFAULT 0,
+  pricing_mode VARCHAR(20) NOT NULL DEFAULT 'AREA',
+  billing_quantity DECIMAL(12,4) NOT NULL DEFAULT 0,
   base_unit_price DECIMAL(14,4) NOT NULL DEFAULT 0,
   special_adjust_total DECIMAL(14,2) NOT NULL DEFAULT 0,
   final_unit_price DECIMAL(14,4) NOT NULL DEFAULT 0,
@@ -1113,6 +1176,9 @@ CREATE TABLE IF NOT EXISTS factory_order_quote_item_extra_price (
   quote_id BIGINT NOT NULL,
   source_rule_id BIGINT NULL,
   rule_name VARCHAR(100) NOT NULL,
+  rule_category VARCHAR(100) NULL,
+  charge_reason VARCHAR(500) NULL,
+  is_custom TINYINT NOT NULL DEFAULT 0,
   adjust_mode VARCHAR(50) NOT NULL,
   adjust_value DECIMAL(14,4) NOT NULL,
   unit_desc VARCHAR(50) NULL,
@@ -1184,6 +1250,7 @@ CREATE TABLE IF NOT EXISTS customer_quote_pdf (
   product_craft_discount DECIMAL(14,2) NOT NULL,
   non_discount_craft DECIMAL(14,2) NOT NULL,
   hardware_amount DECIMAL(14,2) NOT NULL,
+  external_quote_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
   price_adjustment DECIMAL(14,2) NOT NULL,
   untaxed_total DECIMAL(14,2) NOT NULL,
   tax_amount DECIMAL(14,2) NOT NULL,

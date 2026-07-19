@@ -111,6 +111,29 @@ public class OrderFlowController {
         return ApiResponse.ok(service.listQuotes(id));
     }
 
+    @PostMapping("/factory-orders/{id}/discount-requests")
+    public ApiResponse<Map<String, Object>> requestDiscount(@PathVariable String id,
+                                                             @RequestBody DiscountRequest req) {
+        return ApiResponse.ok(service.requestDiscount(id, req));
+    }
+
+    @PostMapping("/discount-requests/{id}/approve")
+    public ApiResponse<Map<String, Object>> approveDiscount(@PathVariable Long id,
+                                                             @RequestBody ApprovalRequest req) {
+        return ApiResponse.ok(service.approveDiscount(id, req));
+    }
+
+    @PostMapping("/factory-orders/{id}/external-quotes")
+    public ApiResponse<Map<String, Object>> saveExternalQuote(@PathVariable String id,
+                                                               @RequestBody ExternalQuoteRequest req) {
+        return ApiResponse.ok(service.saveExternalQuote(id, req));
+    }
+
+    @GetMapping("/factory-orders/{id}/external-quotes")
+    public ApiResponse<List<Map<String, Object>>> externalQuotes(@PathVariable String id) {
+        return ApiResponse.ok(service.listExternalQuotes(id));
+    }
+
     @GetMapping("/quotes/{quoteId}")
     public ApiResponse<Map<String, Object>> quoteDetail(@PathVariable Long quoteId) {
         return ApiResponse.ok(service.getQuote(quoteId));
@@ -199,7 +222,7 @@ public class OrderFlowController {
         return ApiResponse.ok(service.releaseToCutting(id));
     }
 
-    public record ProductionLineRequest(String lineCode, String lineName, Boolean enabled, Integer sortOrder) {}
+    public record ProductionLineRequest(String lineCode, String lineName, String quoteMode, Boolean enabled, Integer sortOrder) {}
     public record ReceivingAccountRequest(String accountCode, String accountName, String paymentMethod,
                                           String bankName, String accountNoMasked, Boolean enabled, Integer sortOrder) {}
     public record HardwareItemRequest(String hardwareCode, String hardwareName, String specification, String unit,
@@ -208,6 +231,10 @@ public class OrderFlowController {
                                     String parentFactoryOrderId, String remark, Integer sortOrder) {}
     public record AssignmentRequest(Long userId, String reason) {}
     public record QuoteRequest(BigDecimal discountRate, String quoteDesc, Boolean submit, List<QuoteCalcRequest> items) {}
+    public record DiscountRequest(BigDecimal requestedRate, String reason) {}
+    public record ExternalQuoteRequest(String externalQuoteNo, BigDecimal finalAmount, LocalDate quoteDate,
+                                       String attachmentPath, Boolean customerConfirmed,
+                                       LocalDateTime confirmedAt, String remark) {}
     public record PriceAdjustmentRequest(BigDecimal finalAmount, String reason) {}
     public record ApprovalRequest(Boolean approved, String remark) {}
     public record QuoteConfirmationRequest(Long pdfId, String confirmationMethod, LocalDateTime confirmedAt,

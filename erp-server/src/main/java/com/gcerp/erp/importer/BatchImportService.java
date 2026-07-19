@@ -41,7 +41,7 @@ public class BatchImportService {
     private static final Map<String, Set<String>> ALLOW_FIELDS = Map.of(
             CUSTOMER, Set.of("customer_code", "customer_name", "phone", "address", "level", "owner", "custom_fields", "custom_text1", "custom_text2", "custom_text3"),
             STAFF, Set.of("staff_code", "staff_name", "role_type", "process_name", "phone", "status", "custom_fields", "custom_text1", "custom_text2", "custom_text3"),
-            PRODUCT, Set.of("product_code", "type", "product_name", "model", "material_name", "color", "handle_color", "unit_price", "unit_price_unit", "thickness", "thickness_unit", "size", "unit", "status", "image_url", "custom_fields", "custom_text1", "custom_text2", "custom_text3"),
+            PRODUCT, Set.of("product_code", "type", "product_name", "model", "material_name", "color", "handle_color", "unit_price", "unit_price_unit", "pricing_mode", "dimension_mode", "min_bill_quantity", "discount_eligible", "thickness", "thickness_unit", "size", "unit", "status", "image_url", "custom_fields", "custom_text1", "custom_text2", "custom_text3"),
             MATERIAL, Set.of("material_code", "material_name", "material_type", "color", "length_mm", "width_mm", "thickness_mm", "unit", "status", "image_url", "custom_fields", "custom_text1", "custom_text2", "custom_text3"),
             PROCESS_RULE, Set.of("rule_code", "rule_name", "rule_type", "rule_content", "status", "custom_fields", "custom_text1", "custom_text2", "custom_text3"),
             PRICE_RULE, Set.of("rule_code", "rule_name", "price_type", "price_value", "status", "custom_fields", "custom_text1", "custom_text2", "custom_text3"),

@@ -24,7 +24,7 @@ public class MasterDataService {
 
     private static final Map<String, Set<String>> UPDATE_FIELDS = Map.of(
             "人员管理", Set.of("staff_code", "staff_name", "role_type", "process_name", "phone", "status", "custom_fields", "custom_text1", "custom_text2", "custom_text3"),
-            "产品资料", Set.of("product_code", "type", "product_name", "model", "material_name", "color", "handle_color", "unit_price", "unit_price_unit", "thickness", "thickness_unit", "size", "image_url", "unit", "status", "custom_fields", "custom_text1", "custom_text2", "custom_text3"),
+            "产品资料", Set.of("product_code", "type", "product_name", "model", "material_name", "color", "handle_color", "unit_price", "unit_price_unit", "pricing_mode", "dimension_mode", "min_bill_quantity", "discount_eligible", "thickness", "thickness_unit", "size", "image_url", "unit", "status", "custom_fields", "custom_text1", "custom_text2", "custom_text3"),
             "材料资料", Set.of("material_code", "material_name", "material_type", "color", "length_mm", "width_mm", "thickness_mm", "image_url", "unit", "status", "custom_fields", "custom_text1", "custom_text2", "custom_text3")
     );
 

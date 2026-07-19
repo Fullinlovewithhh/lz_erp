@@ -29,6 +29,7 @@ public class V3SchemaInitializer implements ApplicationRunner {
                   id BIGINT PRIMARY KEY AUTO_INCREMENT,
                   line_code VARCHAR(10) NOT NULL,
                   line_name VARCHAR(100) NOT NULL,
+                  quote_mode VARCHAR(20) NOT NULL DEFAULT 'ERP',
                   enabled TINYINT NOT NULL DEFAULT 1,
                   sort_order INT NOT NULL DEFAULT 0,
                   created_at DATETIME NOT NULL,
@@ -42,6 +43,19 @@ public class V3SchemaInitializer implements ApplicationRunner {
                 """);
         jdbcTemplate.update("UPDATE production_line SET line_name='实木生产线',updated_at=NOW() WHERE line_code='L' AND line_name='L生产线'");
         jdbcTemplate.update("UPDATE production_line SET line_name='板式生产线',updated_at=NOW() WHERE line_code='V' AND line_name='V生产线'");
+        addColumn("production_line", "quote_mode", "VARCHAR(20) NOT NULL DEFAULT 'ERP'");
+        jdbcTemplate.update("UPDATE production_line SET quote_mode='ERP',updated_at=NOW() WHERE line_code='L'");
+        jdbcTemplate.update("UPDATE production_line SET quote_mode='EXTERNAL',updated_at=NOW() WHERE line_code='V'");
+        jdbcTemplate.update("""
+                UPDATE factory_order fo JOIN production_line pl ON pl.id=fo.production_line_id
+                SET fo.status='待外部报价登记',fo.updated_at=NOW()
+                WHERE pl.quote_mode='EXTERNAL' AND fo.current_quote_version=0 AND fo.status='待报价分配'
+                """);
+        addColumn("product", "pricing_mode", "VARCHAR(20) NOT NULL DEFAULT 'AREA'");
+        addColumn("product", "dimension_mode", "VARCHAR(30) NOT NULL DEFAULT 'WIDTH_HEIGHT'");
+        addColumn("product", "min_bill_quantity", "DECIMAL(12,4) NULL");
+        addColumn("product", "discount_eligible", "TINYINT NOT NULL DEFAULT 1");
+        addColumn("customer", "default_discount_rate", "DECIMAL(6,4) NOT NULL DEFAULT 1.0000");
     }
 
     private void addCustomerOrderColumns() {
@@ -67,7 +81,9 @@ public class V3SchemaInitializer implements ApplicationRunner {
                 CREATE TABLE IF NOT EXISTS customer_order_cad_file (
                   id BIGINT PRIMARY KEY AUTO_INCREMENT, customer_order_id BIGINT NOT NULL,
                   file_name VARCHAR(255) NOT NULL, file_ext VARCHAR(20) NULL, file_size BIGINT NULL,
-                  file_path VARCHAR(500) NOT NULL, created_by BIGINT NULL, created_at DATETIME NOT NULL,
+                  file_path VARCHAR(500) NOT NULL, version_no INT NOT NULL DEFAULT 1,
+                  is_current TINYINT NOT NULL DEFAULT 1, version_remark VARCHAR(500) NULL,
+                  created_by BIGINT NULL, created_at DATETIME NOT NULL,
                   KEY idx_customer_order_cad_order (customer_order_id)
                 )
                 """,
@@ -103,6 +119,38 @@ public class V3SchemaInitializer implements ApplicationRunner {
                   from_user_id BIGINT NULL, to_user_id BIGINT NULL, action_type VARCHAR(30) NOT NULL,
                   reason VARCHAR(500) NULL, operated_by BIGINT NOT NULL, created_at DATETIME NOT NULL,
                   KEY idx_assignment_log_order (factory_order_id)
+                )
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS factory_order_external_quote (
+                  id BIGINT PRIMARY KEY AUTO_INCREMENT, factory_order_id VARCHAR(50) NOT NULL,
+                  version_no INT NOT NULL, external_quote_no VARCHAR(100) NULL,
+                  final_amount DECIMAL(14,2) NOT NULL, quote_date DATE NOT NULL,
+                  attachment_path VARCHAR(500) NULL, confirmation_status VARCHAR(30) NOT NULL DEFAULT '待客户确认',
+                  confirmed_at DATETIME NULL, recorded_by BIGINT NOT NULL, recorded_at DATETIME NOT NULL,
+                  status VARCHAR(30) NOT NULL DEFAULT '有效', remark VARCHAR(500) NULL,
+                  UNIQUE KEY uk_external_quote_version (factory_order_id,version_no),
+                  KEY idx_external_quote_order (factory_order_id)
+                )
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS customer_discount_policy (
+                  id BIGINT PRIMARY KEY AUTO_INCREMENT, customer_id BIGINT NOT NULL,
+                  discount_rate DECIMAL(6,4) NOT NULL DEFAULT 1.0000,
+                  effective_from DATE NOT NULL, effective_to DATE NULL, status VARCHAR(30) NOT NULL DEFAULT '已批准',
+                  approved_by BIGINT NULL, approved_at DATETIME NULL, remark VARCHAR(500) NULL,
+                  created_by BIGINT NOT NULL, created_at DATETIME NOT NULL,
+                  KEY idx_discount_policy_customer (customer_id,effective_from)
+                )
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS factory_order_discount_request (
+                  id BIGINT PRIMARY KEY AUTO_INCREMENT, factory_order_id VARCHAR(50) NOT NULL,
+                  original_rate DECIMAL(6,4) NOT NULL, requested_rate DECIMAL(6,4) NOT NULL,
+                  reason VARCHAR(500) NOT NULL, status VARCHAR(30) NOT NULL DEFAULT '待审批',
+                  requested_by BIGINT NOT NULL, requested_at DATETIME NOT NULL,
+                  approved_by BIGINT NULL, approved_at DATETIME NULL, approval_remark VARCHAR(500) NULL,
+                  KEY idx_discount_request_order (factory_order_id,status)
                 )
                 """,
                 """
@@ -257,12 +305,15 @@ public class V3SchemaInitializer implements ApplicationRunner {
         addColumn("factory_order_quote_item", "handle_color", "VARCHAR(100) NULL");
         addColumn("factory_order_quote_item", "width_mm", "DECIMAL(12,2) NULL");
         addColumn("factory_order_quote_item", "height_mm", "DECIMAL(12,2) NULL");
+        addColumn("factory_order_quote_item", "length_mm", "DECIMAL(12,2) NULL");
         addColumn("factory_order_quote_item", "thickness_mm", "DECIMAL(12,2) NULL");
         addColumn("factory_order_quote_item", "hinge_hole", "VARCHAR(100) NULL");
         addColumn("factory_order_quote_item", "process_desc", "VARCHAR(500) NULL");
         addColumn("factory_order_quote_item", "attachment_name", "VARCHAR(200) NULL");
         addColumn("factory_order_quote_item", "attachment_path", "VARCHAR(500) NULL");
         addColumn("factory_order_quote_item", "area_m2", "DECIMAL(12,4) NOT NULL DEFAULT 0");
+        addColumn("factory_order_quote_item", "pricing_mode", "VARCHAR(20) NOT NULL DEFAULT 'AREA'");
+        addColumn("factory_order_quote_item", "billing_quantity", "DECIMAL(12,4) NOT NULL DEFAULT 0");
         addColumn("factory_order_quote_item", "base_unit_price", "DECIMAL(14,4) NOT NULL DEFAULT 0");
         addColumn("factory_order_quote_item", "special_adjust_total", "DECIMAL(14,2) NOT NULL DEFAULT 0");
         addColumn("factory_order_quote_item", "final_unit_price", "DECIMAL(14,4) NOT NULL DEFAULT 0");
@@ -272,16 +323,24 @@ public class V3SchemaInitializer implements ApplicationRunner {
         addColumn("factory_order_quote_item", "technician", "VARCHAR(100) NULL");
         addColumn("customer_quote_confirmation", "status", "VARCHAR(30) NOT NULL DEFAULT '有效'");
         addColumn("customer_quote_confirmation", "pdf_id", "BIGINT NULL");
+        addColumn("customer_quote_pdf", "external_quote_amount", "DECIMAL(14,2) NOT NULL DEFAULT 0");
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS factory_order_quote_item_extra_price (
                   id BIGINT PRIMARY KEY AUTO_INCREMENT, quote_item_id BIGINT NOT NULL, quote_id BIGINT NOT NULL,
                   source_rule_id BIGINT NULL, rule_name VARCHAR(100) NOT NULL, adjust_mode VARCHAR(50) NOT NULL,
                   adjust_value DECIMAL(14,4) NOT NULL, unit_desc VARCHAR(50) NULL, rule_quantity DECIMAL(12,4) NULL,
                   final_charge DECIMAL(14,2) NOT NULL, discount_eligible TINYINT NOT NULL DEFAULT 1,
+                  rule_category VARCHAR(100) NULL, charge_reason VARCHAR(500) NULL, is_custom TINYINT NOT NULL DEFAULT 0,
                   created_at DATETIME NOT NULL, KEY idx_v3_quote_extra_item (quote_item_id),
                   KEY idx_v3_quote_extra_quote (quote_id)
                 )
                 """);
+        addColumn("customer_order_cad_file", "version_no", "INT NOT NULL DEFAULT 1");
+        addColumn("customer_order_cad_file", "is_current", "TINYINT NOT NULL DEFAULT 1");
+        addColumn("customer_order_cad_file", "version_remark", "VARCHAR(500) NULL");
+        addColumn("factory_order_quote_item_extra_price", "rule_category", "VARCHAR(100) NULL");
+        addColumn("factory_order_quote_item_extra_price", "charge_reason", "VARCHAR(500) NULL");
+        addColumn("factory_order_quote_item_extra_price", "is_custom", "TINYINT NOT NULL DEFAULT 0");
     }
 
     private void addColumn(String table, String column, String definition) {
