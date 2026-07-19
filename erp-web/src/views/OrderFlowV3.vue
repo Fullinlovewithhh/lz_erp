@@ -146,7 +146,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import * as api from '../api/contract'
 
 const props = defineProps({ view: { type: String, default: '客户订单' } })
@@ -196,17 +196,37 @@ const hardwareForm = ref({ hardwareCode: '', hardwareName: '', unit: '个', sale
 const blankQuoteItem = () => ({ sourceType: 'PRODUCT', productCategory: '', productName: '', specification: '', materialStructure: '', handleColor: '', widthMm: 0, heightMm: 0, lengthMm: 0, thicknessMm: 0, quantity: 1, hingeHole: '', processDesc: '', attachmentName: '', attachmentPath: '', unit: '', pricingMode: 'AREA', minBillQuantity: 0, baseUnitPrice: 0, selectedRuleIds: [], customRules: [], discountEligible: true, nonDiscountRuleIds: [], nonDiscountCustomRuleNames: [], productionProcess: '', technician: '', productId: '', hardwareItemId: '', newRule: { ruleCategory: '', ruleName: '', chargeReason: '', adjustMode: 'FIXED_PER_M2', adjustValue: 0, unitDesc: '元/平方米', discountEligible: true } })
 const quoteForm = ref({ discountRate: 1, discountReason: '', quoteDesc: '', items: [blankQuoteItem()] })
 
-onMounted(refreshAll)
-
 watch(() => props.view, async (view) => {
   const tab = viewTabs[view] || '客户订单'
   activeTab.value = tab
-  if (tab === 'CAD评审') await loadReviewPool()
-  if (tab === '商务财务') await loadCommercial()
+  await refreshCurrentView(tab)
 }, { immediate: true })
 
-async function refreshAll() {
-  await Promise.all([loadCustomers(), loadOrders(), loadLines(), loadFactoryOrders(), loadCommercial(), loadAccounts(), loadHardware(), loadQuoteRules(), loadCompanyProfile(), loadCatalogs()])
+async function refreshCurrentView(tab = activeTab.value) {
+  if (tab === '客户订单') {
+    await Promise.all([loadCustomers(), loadOrders()])
+    return
+  }
+  if (tab === 'CAD评审') {
+    await loadReviewPool()
+    return
+  }
+  if (tab === '拆单') {
+    await Promise.all([loadOrders(), loadLines(), loadFactoryOrders()])
+    if (selectedCustomerOrderId.value) await loadDrafts()
+    return
+  }
+  if (tab === '工厂订单') {
+    await loadFactoryOrders()
+    return
+  }
+  if (tab === '商务财务') {
+    await Promise.all([loadCommercial(), loadAccounts()])
+    return
+  }
+  if (tab === '配置') {
+    await Promise.all([loadLines(), loadAccounts(), loadHardware(), loadCompanyProfile()])
+  }
 }
 async function loadCustomers() { customers.value = (await api.listCustomers('')).data.data || [] }
 async function loadOrders() { orderRows.value = (await api.listCustomerOrders(null, '')).data.data || [] }
@@ -233,13 +253,13 @@ async function createOrder() {
 }
 async function uploadCad(id, event) { const file = event.target.files?.[0]; if (!file) return; try { await api.uploadCustomerOrderCad(id, file); window.alert('CAD已上传') } catch (e) { message(e) } finally { event.target.value = '' } }
 async function claimReview(id) { try { await api.claimCustomerOrderReview(id); await loadReviewPool(); await loadOrders() } catch (e) { message(e) } }
-async function selectForSplit(order) { selectedCustomerOrderId.value = String(order.id); activeTab.value = '拆单'; await loadDrafts() }
+async function selectForSplit(order) { selectedCustomerOrderId.value = String(order.id); activeTab.value = '拆单'; await Promise.all([loadOrders(), loadLines(), loadFactoryOrders()]); await loadDrafts() }
 async function loadDrafts() { if (!selectedCustomerOrderId.value) { drafts.value = []; return }; drafts.value = (await api.listSplitDrafts(Number(selectedCustomerOrderId.value))).data.data || [] }
 async function saveDraft() { try { await api.addSplitDraft(Number(selectedCustomerOrderId.value), { ...draftForm.value, productionLineId: Number(draftForm.value.productionLineId), parentFactoryOrderId: draftForm.value.parentFactoryOrderId || null }); draftForm.value = { factoryOrderName: '', productionLineId: '', orderType: 'NORMAL', parentFactoryOrderId: '', remark: '' }; await loadDrafts() } catch (e) { message(e) } }
 async function submitSplit() { try { await api.submitCustomerOrderSplit(Number(selectedCustomerOrderId.value)); await Promise.all([loadDrafts(), loadFactoryOrders(), loadOrders()]) } catch (e) { message(e) } }
 async function claimFactory(id) { try { const row=(await api.claimFactoryOrderV3(id)).data.data; await loadFactoryOrders(); await openQuote(row) } catch (e) { message(e) } }
 async function assignFactory(order) { const userId = window.prompt('请输入新的报价负责人用户ID'); if (!userId) return; const reason = window.prompt('填写指定或转交原因') || ''; try { await api.assignFactoryOrderV3(order.factory_order_id, { userId: Number(userId), reason }); await loadFactoryOrders() } catch (e) { message(e) } }
-async function openQuote(order) { quoteFactory.value = order; quoteForm.value = { discountRate: Number(order.current_quote_version ? order.discount_rate : (order.customer_discount_rate || 1)), discountReason: '', quoteDesc: '', items: [blankQuoteItem()] }; const versions = (await api.listFactoryOrderQuotesV3(order.factory_order_id)).data.data || []; if (versions.length) { const full = (await api.getFactoryOrderQuoteV3(versions[0].id)).data.data; quoteForm.value = { discountRate: Number(full.discount_rate || 1), discountReason: '', quoteDesc: full.quote_desc || '', items: (full.items || []).map(savedQuoteItem) } } }
+async function openQuote(order) { await Promise.all([loadCatalogs(), loadHardware(), loadQuoteRules()]); quoteFactory.value = order; quoteForm.value = { discountRate: Number(order.current_quote_version ? order.discount_rate : (order.customer_discount_rate || 1)), discountReason: '', quoteDesc: '', items: [blankQuoteItem()] }; const versions = (await api.listFactoryOrderQuotesV3(order.factory_order_id)).data.data || []; if (versions.length) { const full = (await api.getFactoryOrderQuoteV3(versions[0].id)).data.data; quoteForm.value = { discountRate: Number(full.discount_rate || 1), discountReason: '', quoteDesc: full.quote_desc || '', items: (full.items || []).map(savedQuoteItem) } } }
 async function requestDiscount() { try { await api.requestFactoryOrderDiscountV3(quoteFactory.value.factory_order_id, { requestedRate: Number(quoteForm.value.discountRate), reason: quoteForm.value.discountReason }); window.alert('临时折扣已提交审批') } catch(e){ message(e) } }
 async function approveDiscount(id, approved) { try { await api.approveFactoryOrderDiscountV3(id, { approved, remark: '' }); await loadCommercial() } catch(e){ message(e) } }
 async function openExternalQuote(order) { externalQuoteFactory.value = order; externalQuoteForm.value = { externalQuoteNo: '', finalAmount: Number(order.discounted_quote_amount || 0), quoteDate: new Date().toISOString().slice(0, 10), attachmentPath: '', customerConfirmed: false, remark: '' }; externalQuoteVersions.value = (await api.listFactoryOrderExternalQuotesV3(order.factory_order_id)).data.data || [] }

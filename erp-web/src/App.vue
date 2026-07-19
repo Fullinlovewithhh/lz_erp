@@ -1661,13 +1661,18 @@ async function doLogin() {
     if (data.code !== 0) return window.alert(data.message || '登录失败')
     const d = data.data || {}
     setAuthToken(d.token || '')
-    isLoggedIn.value = true
     loginUserName.value = d.displayName || d.username || username
     loginRole.value = d.roleCode || ''
     allowedModules.value = Array.isArray(d.allowedModules) ? d.allowedModules : []
     quoteForm.value.operator = loginUserName.value || quoteForm.value.operator
     await bootstrapAfterLogin()
+    isLoggedIn.value = true
   } catch (e) {
+    isLoggedIn.value = false
+    loginUserName.value = ''
+    loginRole.value = ''
+    allowedModules.value = []
+    clearAuthToken()
     window.alert(e?.response?.data?.message || e?.message || '登录失败')
   }
 }
@@ -1876,15 +1881,16 @@ const undoIndex = ref(-1)
 const restoringUndo = ref(false)
 const quoteEditBaseline = ref('')
 
-const filteredModules = computed(() => {
-  const kw = menuKeyword.value.trim()
-  if (!kw) return modules
-  return modules.filter((m) => moduleDisplayName(m.name).includes(kw) || m.children.some((c) => c.includes(kw)))
-})
 const moduleAllowed = (name) => {
   const scope = (allowedModules.value || []).filter(Boolean)
-  return scope.length === 0 || scope.includes(name)
+  return scope.includes(name)
 }
+const filteredModules = computed(() => {
+  const kw = menuKeyword.value.trim()
+  const visibleModules = modules.filter((m) => moduleAllowed(m.name))
+  if (!kw) return visibleModules
+  return visibleModules.filter((m) => moduleDisplayName(m.name).includes(kw) || m.children.some((c) => c.includes(kw)))
+})
 const activeSubTitle = computed(() => modules.find((m) => m.name === activeModule.value)?.children.find((s) => subName(s) === activeSubModule.value) || activeSubModule.value)
 const isMasterDataPage = computed(() => activeModule.value === C.master && [C.staff, C.userAuth, C.product, C.materialData].includes(activeSubModule.value))
 const showFilterBtn = computed(() => !batchMode.value && activeModule.value === C.master)
@@ -2411,17 +2417,31 @@ function applyGlobalSearch() {
   }
 }
 
+function resolveLoginLanding() {
+  const preferredByRole = {
+    ADMIN: [C.master, C.staff],
+    DIRECTOR: [C.finance, '价格调整审批'],
+    SERVICE: [C.customer, '客户档案'],
+    ENGINEER: [C.order, 'CAD评审池'],
+    FINANCE: [C.finance, '到账确认'],
+    PRODUCTION: [C.schedule, '待下料订单'],
+  }
+  const preferred = preferredByRole[String(loginRole.value || '').toUpperCase()]
+  if (preferred && moduleAllowed(preferred[0])) {
+    return { moduleName: preferred[0], subModuleName: preferred[1] }
+  }
+  const firstModule = modules.find((module) => moduleAllowed(module.name))
+  if (!firstModule) return null
+  return { moduleName: firstModule.name, subModuleName: subName(firstModule.children[0] || '') }
+}
+
 async function bootstrapAfterLogin() {
-  await refreshMasterData()
-  await loadAuthUsers()
-  await loadOrders()
-  await ensureProductCatalog()
-  ensureQuoteCategory()
-  await loadPriceRules()
-  await loadQuoteOrders()
-  fillImportExample()
-  if (quoteItems.value.length === 0) addQuoteItem()
-  await searchContracts()
+  const landing = resolveLoginLanding()
+  if (!landing) throw new Error('当前账号未配置可访问模块，请联系管理员')
+  activeModule.value = landing.moduleName
+  activeSubModule.value = landing.subModuleName
+  resetSubModuleState(landing.subModuleName)
+  await refreshSubModuleData(landing.subModuleName)
   pushUndoSnapshot()
 }
 
@@ -2480,31 +2500,27 @@ function resetSubModuleState(subName) {
   }
 }
 
-function refreshSubModuleData(subName) {
+async function refreshSubModuleData(subName) {
   if ([C.staff, C.product, C.materialData].includes(subName)) {
-    refreshMasterData()
+    await refreshMasterData()
   }
   if (subName === C.userAuth) {
-    loadAuthUsers()
+    await loadAuthUsers()
   }
   if (subName === '报价明细') {
-    searchContracts()
-    loadCadFiles()
-    ensureProductCatalog()
-    loadPriceRules()
-    loadQuoteAssignments()
+    await Promise.all([searchContracts(), loadCadFiles(), ensureProductCatalog(), loadPriceRules(), loadQuoteAssignments()])
     if (!quoteEditBaseline.value) quoteEditBaseline.value = currentQuoteEditFingerprint.value
   }
   if (subName === '报价单主表') {
-    loadQuoteOrders()
+    await loadQuoteOrders()
   }
   if (subName === '深化订单池') {
-    loadQuotePool()
+    await loadQuotePool()
   }
   if (subName === C.priceRule) {
-    loadPriceRules()
+    await loadPriceRules()
   }
-  if (activeModule.value === C.order && subName === '订单状态') loadOrders()
+  if (activeModule.value === C.order && subName === '订单状态') await loadOrders()
 }
 
 function showProcessRuleNotice() {
